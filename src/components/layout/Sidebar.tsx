@@ -1,4 +1,4 @@
-import { LayoutDashboard, ArrowLeftRight, Tag, Wallet, Cloud, HardDrive, RefreshCw, Users } from 'lucide-react';
+import { Home, LayoutDashboard, ArrowLeftRight, Tag, Wallet, Cloud, HardDrive, RefreshCw, Users } from 'lucide-react';
 import type { ViewType } from '../../types';
 
 interface SidebarProps {
@@ -12,6 +12,7 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
+  { id: 'home' as ViewType, label: 'Home', icon: Home },
   { id: 'dashboard' as ViewType, label: 'Dashboard', icon: LayoutDashboard },
   { id: 'transactions' as ViewType, label: 'Transactions', icon: ArrowLeftRight },
   { id: 'categories' as ViewType, label: 'Categories', icon: Tag },

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { HouseholdMember } from '../types';
-import type { HouseholdMemberRow } from '../lib/supabase';
 
 export interface UseHouseholdReturn {
   householdId: string | null;
@@ -10,16 +9,6 @@ export interface UseHouseholdReturn {
   householdLoading: boolean;
   inviteUser: (email: string) => Promise<{ link: string } | { error: string }>;
   acceptInvite: (token: string) => Promise<string | null>;
-}
-
-function rowToMember(r: HouseholdMemberRow): HouseholdMember {
-  return {
-    userId:   r.user_id,
-    email:    r.profiles?.email ?? 'Unknown',
-    fullName: r.profiles?.full_name ?? undefined,
-    role:     r.role as HouseholdMember['role'],
-    joinedAt: r.joined_at,
-  };
 }
 
 export function useHousehold(
@@ -35,12 +24,28 @@ export function useHousehold(
 
   const loadMembers = useCallback(async (hhId: string) => {
     if (!supabase) return;
-    const { data, error } = await supabase
+    const { data: memberRows, error } = await supabase
       .from('household_members')
-      .select('*, profiles(email, full_name)')
+      .select('user_id, role, joined_at')
       .eq('household_id', hhId);
-    if (error) console.error('[BT] loadMembers error:', error);
-    if (data) setMembers(data.map(rowToMember));
+    if (error) { console.error('[BT] loadMembers error:', error); return; }
+    if (!memberRows?.length) return;
+
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, email, full_name')
+      .in('id', memberRows.map((r) => r.user_id));
+
+    const profileMap = Object.fromEntries(
+      (profileRows ?? []).map((p) => [p.id, p])
+    );
+    setMembers(memberRows.map((r) => ({
+      userId:   r.user_id,
+      email:    profileMap[r.user_id]?.email ?? 'Unknown',
+      fullName: profileMap[r.user_id]?.full_name ?? undefined,
+      role:     r.role as HouseholdMember['role'],
+      joinedAt: r.joined_at,
+    })));
   }, []);
 
   useEffect(() => {

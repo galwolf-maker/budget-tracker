@@ -1,5 +1,5 @@
 export type TransactionType = 'income' | 'expense';
-export type ViewType = 'dashboard' | 'transactions' | 'categories';
+export type ViewType = 'home' | 'dashboard' | 'transactions' | 'categories';
 
 export interface Transaction {
   id: string;

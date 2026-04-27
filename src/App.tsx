@@ -6,7 +6,9 @@ import { ToastContainer } from './components/ui/Toast';
 import { TransactionForm } from './components/transactions/TransactionForm';
 import { StatementImportModal } from './components/statement/StatementImportModal';
 import { AuthModal } from './components/auth/AuthModal';
+import { AuthCallback } from './components/auth/AuthCallback';
 import { HouseholdModal } from './components/household/HouseholdModal';
+import { Home } from './views/Home';
 import { Dashboard } from './views/Dashboard';
 import { Transactions } from './views/Transactions';
 import { Categories } from './views/Categories';
@@ -23,13 +25,24 @@ import type { ViewType, Transaction } from './types';
 import type { ToastData } from './components/ui/Toast';
 
 const VIEW_TITLES: Record<ViewType, string> = {
+  home: 'Home',
   dashboard: 'Dashboard',
   transactions: 'Transactions',
   categories: 'Categories',
 };
 
 export default function App() {
-  const [activeView, setActiveView] = useState<ViewType>('dashboard');
+  // Detect Supabase email confirmation callback in the URL
+  const [isAuthCallback] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return (
+      params.has('code') ||
+      params.has('error') ||
+      window.location.hash.startsWith('#access_token=')
+    );
+  });
+
+  const [activeView, setActiveView] = useState<ViewType>('home');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isStatementOpen, setIsStatementOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -116,10 +129,11 @@ export default function App() {
     }
   }, [pendingInviteToken, userId, authLoading]);
 
-  // ── Show toast when auth changes ──────────────────────────────────────────
+  // ── Navigate to home + toast when user signs in ───────────────────────────
   useEffect(() => {
     if (!user) return;
     setIsAuthOpen(false);
+    setActiveView('home');
     if (!pendingInviteToken) {
       toast('success', 'Signed in — your data is now synced.');
     }
@@ -206,6 +220,26 @@ export default function App() {
     )
     .slice(0, 5);
 
+  // ── Email confirmation callback ───────────────────────────────────────────
+  if (isAuthCallback) {
+    return (
+      <CurrencyContext.Provider value={{ currency, setCurrency }}>
+        <AuthCallback
+          onSuccess={() => {
+            // Auth state change fires automatically; navigate handled by useEffect above
+            window.location.replace('/');
+          }}
+          onBackToLogin={() => {
+            window.history.replaceState({}, '', '/');
+            setIsAuthOpen(true);
+            // Force re-render without the callback flag
+            window.location.replace('/');
+          }}
+        />
+      </CurrencyContext.Provider>
+    );
+  }
+
   // ── Auth + household loading splash ──────────────────────────────────────
   // Block UI until both auth and household are resolved so no mutation can
   // fire with a null householdId (which would skip the Supabase save).
@@ -252,6 +286,16 @@ export default function App() {
         />
 
         <main className="flex-1 p-4 sm:p-6 pb-24 lg:pb-8">
+          {activeView === 'home' && (
+            <Home
+              user={user}
+              summary={summary}
+              recentTransactions={recentTransactions}
+              onNavigate={setActiveView}
+              onAddTransaction={openAdd}
+              onSignIn={() => setIsAuthOpen(true)}
+            />
+          )}
           {activeView === 'dashboard' && (
             <Dashboard
               summary={summary}
