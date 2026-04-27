@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "PowerShell($paths = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Write-Output $paths)",
+      "PowerShell($userPath = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); Write-Output $userPath)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:5173\" -UseBasicParsing -TimeoutSec 5)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:5175\" -UseBasicParsing -TimeoutSec 5 | Select-Object StatusCode, @{N=\"Title\";E={\\($_.Content -split \"`n\" | Select-String \"title\"\\) -join \"\"}})",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; Set-Location \"C:\\\\Users\\\\Gal Wolf\\\\budget-tracker\"; npx tsc --noEmit 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; Set-Location \"C:\\\\Users\\\\Gal Wolf\\\\budget-tracker\"; npm install @supabase/supabase-js 2>&1 | tail -5)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; Set-Location \"C:\\\\Users\\\\Gal Wolf\\\\budget-tracker\"; npm install @supabase/supabase-js 2>&1 | Select-Object -Last 6)",
+      "Bash(npx tsc *)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "PowerShell(Get-Command node, npm, npx -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-ChildItem \"C:\\\\Program Files\\\\nodejs\" -ErrorAction SilentlyContinue; Get-ChildItem \"C:\\\\Program Files \\(x86\\)\\\\nodejs\" -ErrorAction SilentlyContinue; Get-ChildItem \"$env:APPDATA\\\\npm\" -ErrorAction SilentlyContinue | Select-Object -First 5)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; cd \"C:\\\\Users\\\\Gal Wolf\\\\budget-tracker\"; npm run build 2>&1 | Select-Object -Last 50)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; cd \"C:\\\\Users\\\\Gal Wolf\\\\budget-tracker\"; npm run build 2>&1 | Select-Object -Last 20)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; cd \"C:\\\\Users\\\\Gal Wolf\\\\budget-tracker\"; git init 2>&1)"
+    ]
+  }
+}
