@@ -64,6 +64,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
 
     (async () => {
       try {
+        console.log('[BT] Loading transactions from Supabase (household:', householdId, ')');
         const { data, error } = await supabase
           .from('transactions')
           .select('*')
@@ -73,17 +74,19 @@ export function useTransactions(userId: string | null, householdId: string | nul
         if (error) throw error;
 
         let rows = data ?? [];
+        console.log('[BT] Supabase returned', rows.length, 'transactions');
 
         // First-login migration: upload localStorage data
         if (rows.length === 0 && !localStorage.getItem(migKey)) {
           const local = lsSnapshotRef.current;
           if (local.length > 0) {
+            console.log('[BT] Migrating', local.length, 'transactions from localStorage to Supabase');
             const { error: upErr } = await supabase
               .from('transactions')
               .insert(local.map((t) => txnToRow(userId, t, householdId)));
 
             if (upErr) {
-              console.error('Migration upload failed:', upErr);
+              console.error('[BT] Migration upload failed:', upErr);
             } else {
               const { data: fresh } = await supabase
                 .from('transactions')
@@ -91,6 +94,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
                 .eq('household_id', householdId)
                 .order('date', { ascending: false });
               rows = fresh ?? [];
+              console.log('[BT] Migration complete —', rows.length, 'transactions in Supabase');
             }
           }
           localStorage.setItem(migKey, 'true');
@@ -98,7 +102,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
 
         setTransactions(rows.map(rowToTxn));
       } catch (err) {
-        console.error('Supabase load failed — using localStorage cache:', err);
+        console.error('[BT] Supabase load failed — using localStorage cache:', err);
       } finally {
         setSyncing(false);
         setDataLoaded(true);
@@ -149,8 +153,12 @@ export function useTransactions(userId: string | null, householdId: string | nul
       };
       setTransactions((prev) => [tx, ...prev]);
       if (userId && supabase && householdId) {
+        console.log('[BT] Saving transaction to Supabase:', tx.id);
         const { error } = await supabase.from('transactions').insert(txnToRow(userId, tx, householdId));
-        if (error) console.error('Supabase insert failed:', error);
+        if (error) console.error('[BT] Supabase insert failed:', error);
+        else console.log('[BT] Transaction saved ✓');
+      } else {
+        console.warn('[BT] Supabase save SKIPPED — userId:', userId, 'householdId:', householdId, 'supabase:', !!supabase);
       }
     },
     [userId, householdId, setTransactions]
@@ -172,7 +180,10 @@ export function useTransactions(userId: string | null, householdId: string | nul
           })
           .eq('id', id)
           .eq('household_id', householdId);
-        if (error) console.error('Supabase update failed:', error);
+        if (error) console.error('[BT] Supabase update failed:', error);
+        else console.log('[BT] Transaction updated ✓', id);
+      } else {
+        console.warn('[BT] Update SKIPPED — userId:', userId, 'householdId:', householdId);
       }
     },
     [userId, householdId, setTransactions]
@@ -187,7 +198,10 @@ export function useTransactions(userId: string | null, householdId: string | nul
           .delete()
           .eq('id', id)
           .eq('household_id', householdId);
-        if (error) console.error('Supabase delete failed:', error);
+        if (error) console.error('[BT] Supabase delete failed:', error);
+        else console.log('[BT] Transaction deleted ✓', id);
+      } else {
+        console.warn('[BT] Delete SKIPPED — userId:', userId, 'householdId:', householdId);
       }
     },
     [userId, householdId, setTransactions]

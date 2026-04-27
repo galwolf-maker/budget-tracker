@@ -7,6 +7,10 @@ const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 export const supabase = url && key ? createClient(url, key) : null;
 export const isSupabaseConfigured = !!supabase;
 
+console.log('[BT] Supabase:', isSupabaseConfigured
+  ? `configured ✓ (${url})`
+  : 'NOT configured — check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY env vars');
+
 // ── DB row shapes (snake_case) ────────────────────────────────────────────────
 
 export interface TxnRow {

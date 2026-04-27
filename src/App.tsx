@@ -202,8 +202,10 @@ export default function App() {
     )
     .slice(0, 5);
 
-  // ── Auth loading splash (only while initial Supabase session is resolved) ─
-  if (authLoading) {
+  // ── Auth + household loading splash ──────────────────────────────────────
+  // Block UI until both auth and household are resolved so no mutation can
+  // fire with a null householdId (which would skip the Supabase save).
+  if (authLoading || (!!user && householdLoading)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
         <div className="flex flex-col items-center gap-3">
