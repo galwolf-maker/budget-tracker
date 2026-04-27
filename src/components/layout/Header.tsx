@@ -4,6 +4,7 @@ import {
   FileText, CreditCard, Sun, Moon,
 } from 'lucide-react';
 import { UserMenu, SignInButton } from '../auth/UserMenu';
+import { useCurrencyContext, CURRENCIES } from '../../context/CurrencyContext';
 import type { Theme } from '../../hooks/useTheme';
 import type { User } from '@supabase/supabase-js';
 
@@ -30,6 +31,7 @@ export function Header({
 }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { currency, setCurrency } = useCurrencyContext();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -71,6 +73,24 @@ export function Header({
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Currency toggle */}
+          <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+            {CURRENCIES.map((c) => (
+              <button
+                key={c.code}
+                onClick={() => setCurrency(c.code)}
+                title={c.label}
+                className={`px-2 py-1.5 transition-colors ${
+                  currency === c.code
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                {c.symbol}
+              </button>
+            ))}
+          </div>
+
           {/* Theme toggle */}
           <button
             onClick={onToggleTheme}
