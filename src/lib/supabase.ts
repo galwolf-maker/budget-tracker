@@ -1,10 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Transaction, Category } from '../types';
 
+console.log('ENV:', import.meta.env);
+
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-export const supabase = url && key ? createClient(url, key) : null;
+let supabaseClient = null;
+try {
+  if (url && key) {
+    supabaseClient = createClient(url, key);
+  }
+} catch (err) {
+  console.error('[BT] Failed to initialize Supabase client:', err);
+}
+
+export const supabase = supabaseClient;
 export const isSupabaseConfigured = !!supabase;
 
 console.log('[BT] Supabase:', isSupabaseConfigured
