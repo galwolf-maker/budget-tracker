@@ -1,5 +1,6 @@
 import { Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { useCurrencyContext } from '../../context/CurrencyContext';
 import { CATEGORY_COLOR_MAP, CHART_PALETTE } from '../../constants/categories';
 import type { Transaction, HouseholdMember } from '../../types';
 
@@ -26,6 +27,7 @@ export function TransactionItem({
   currentUserId,
   members = [],
 }: TransactionItemProps) {
+  const { currency } = useCurrencyContext();
   const color = getCategoryColor(t.category);
   const isIncome = t.type === 'income';
 
@@ -91,7 +93,7 @@ export function TransactionItem({
         }`}
       >
         {isIncome ? '+' : '−'}
-        {formatCurrency(t.amount)}
+        {formatCurrency(t.amount, currency)}
       </div>
 
       {/* Actions — appear on hover */}

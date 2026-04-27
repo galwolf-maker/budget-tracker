@@ -16,6 +16,8 @@ import { useTheme } from './hooks/useTheme';
 import { useMerchantRules } from './hooks/useMerchantRules';
 import { useAuth } from './hooks/useAuth';
 import { useHousehold } from './hooks/useHousehold';
+import { useCurrency } from './hooks/useCurrency';
+import { CurrencyContext } from './context/CurrencyContext';
 import { exportToCSV, parseCSV } from './utils/csv';
 import type { ViewType, Transaction } from './types';
 import type { ToastData } from './components/ui/Toast';
@@ -56,6 +58,8 @@ export default function App() {
 
   const userId = user?.id ?? null;
   const userEmail = user?.email ?? null;
+
+  const { currency, setCurrency } = useCurrency(userId);
 
   const {
     householdId,
@@ -219,6 +223,7 @@ export default function App() {
   }
 
   return (
+    <CurrencyContext.Provider value={{ currency, setCurrency }}>
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
       <Sidebar
         activeView={activeView}
@@ -321,5 +326,6 @@ export default function App() {
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
+    </CurrencyContext.Provider>
   );
 }

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { TrendingUp, TrendingDown, AlertCircle, Zap, Star } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
+import { useCurrencyContext } from '../../context/CurrencyContext';
 import type { Transaction } from '../../types';
 
 interface InsightsPanelProps {
@@ -14,6 +15,9 @@ interface Insight {
 }
 
 export function InsightsPanel({ transactions }: InsightsPanelProps) {
+  const { currency } = useCurrencyContext();
+  const fmt = (v: number): string => formatCurrency(v, currency);
+
   const insights = useMemo((): Insight[] => {
     if (transactions.length < 3) return [];
 
@@ -40,26 +44,26 @@ export function InsightsPanel({ transactions }: InsightsPanelProps) {
       if (pct <= -10) {
         result.push({
           icon: <TrendingDown size={14} />,
-          text: `Spending down ${Math.abs(pct).toFixed(0)}% vs last month — ${formatCurrency(thisTotal)} vs ${formatCurrency(lastTotal)}.`,
+          text: `Spending down ${Math.abs(pct).toFixed(0)}% vs last month — ${fmt(thisTotal)} vs ${fmt(lastTotal)}.`,
           kind: 'good',
         });
       } else if (pct >= 20) {
         result.push({
           icon: <TrendingUp size={14} />,
-          text: `Spending up ${pct.toFixed(0)}% vs last month — ${formatCurrency(thisTotal)} vs ${formatCurrency(lastTotal)}.`,
+          text: `Spending up ${pct.toFixed(0)}% vs last month — ${fmt(thisTotal)} vs ${fmt(lastTotal)}.`,
           kind: 'warn',
         });
       } else {
         result.push({
           icon: <TrendingUp size={14} />,
-          text: `Spent ${formatCurrency(thisTotal)} this month (${pct >= 0 ? '+' : ''}${pct.toFixed(0)}% vs last month).`,
+          text: `Spent ${fmt(thisTotal)} this month (${pct >= 0 ? '+' : ''}${pct.toFixed(0)}% vs last month).`,
           kind: 'neutral',
         });
       }
     } else if (thisTotal > 0) {
       result.push({
         icon: <Star size={14} />,
-        text: `Spent ${formatCurrency(thisTotal)} so far this month.`,
+        text: `Spent ${fmt(thisTotal)} so far this month.`,
         kind: 'neutral',
       });
     }
@@ -75,7 +79,7 @@ export function InsightsPanel({ transactions }: InsightsPanelProps) {
 
     if (topCats.length > 0) {
       const str = topCats
-        .map(([cat, amt]) => `${cat} (${formatCurrency(amt)})`)
+        .map(([cat, amt]) => `${cat} (${fmt(amt)})`)
         .join(', ');
       result.push({
         icon: <Star size={14} />,
@@ -107,7 +111,7 @@ export function InsightsPanel({ transactions }: InsightsPanelProps) {
     for (const t of unusual) {
       result.push({
         icon: <AlertCircle size={14} />,
-        text: `Unusually large ${t.category} charge: ${formatCurrency(t.amount)}${t.description ? ` — "${t.description}"` : ''}.`,
+        text: `Unusually large ${t.category} charge: ${fmt(t.amount)}${t.description ? ` — "${t.description}"` : ''}.`,
         kind: 'warn',
       });
     }
@@ -137,7 +141,7 @@ export function InsightsPanel({ transactions }: InsightsPanelProps) {
     }
 
     return result;
-  }, [transactions]);
+  }, [transactions, currency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (insights.length === 0) return null;
 

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { CheckSquare, Square, AlertTriangle, ChevronDown } from 'lucide-react';
 import { formatCurrency, getTodayString } from '../../utils/formatters';
+import { useCurrencyContext } from '../../context/CurrencyContext';
 import type { Category, TransactionType } from '../../types';
 
 export interface PreviewRow {
@@ -26,6 +27,7 @@ export function PreviewStep({
   onConfirm,
   onBack,
 }: PreviewStepProps) {
+  const { currency } = useCurrencyContext();
   const [rows, setRows] = useState<PreviewRow[]>(initialRows);
 
   const expenseCategories = categories.filter((c) => c.type === 'expense');
@@ -217,7 +219,8 @@ export function PreviewStep({
             {formatCurrency(
               rows
                 .filter((r) => r.selected && r.type === 'expense')
-                .reduce((s, r) => s + r.amount, 0)
+                .reduce((s, r) => s + r.amount, 0),
+              currency
             )}
           </span>{' '}
           in expenses

@@ -1,7 +1,8 @@
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
+export function formatCurrency(amount: number, currency = 'USD'): string {
+  const locale = currency === 'ILS' ? 'he-IL' : 'en-US';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'USD',
+    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);

@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { formatCurrency } from '../../utils/formatters';
+import { useCurrencyContext, useCurrencyFormat, CURRENCIES } from '../../context/CurrencyContext';
 import { CATEGORY_COLOR_MAP, CHART_PALETTE } from '../../constants/categories';
 import type { CategoryDataPoint, MonthlyDataPoint } from '../../types';
 
@@ -39,10 +40,12 @@ function BarTooltip({
   active,
   payload,
   label,
+  formatter,
 }: {
   active?: boolean;
   payload?: BarPayloadItem[];
   label?: string;
+  formatter: (v: number) => string;
 }) {
   if (!active || !payload?.length) return null;
   return (
@@ -53,7 +56,7 @@ function BarTooltip({
           <span style={{ color: entry.color }} className="font-medium">
             {entry.name}
           </span>
-          <span className="text-slate-600 dark:text-slate-300">{formatCurrency(entry.value)}</span>
+          <span className="text-slate-600 dark:text-slate-300">{formatter(entry.value)}</span>
         </div>
       ))}
     </div>
@@ -63,15 +66,17 @@ function BarTooltip({
 function PieTooltip({
   active,
   payload,
+  formatter,
 }: {
   active?: boolean;
   payload?: PiePayloadItem[];
+  formatter: (v: number) => string;
 }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white dark:bg-slate-800 px-3 py-2 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 text-sm">
       <p className="font-semibold text-slate-700 dark:text-slate-200">{payload[0].name}</p>
-      <p className="text-slate-500 dark:text-slate-400">{formatCurrency(payload[0].value)}</p>
+      <p className="text-slate-500 dark:text-slate-400">{formatter(payload[0].value)}</p>
     </div>
   );
 }
@@ -86,6 +91,10 @@ const EmptyChart = ({ label }: { label: string }) => (
 );
 
 export function Charts({ expensesByCategory, monthlyData }: ChartsProps) {
+  const { currency } = useCurrencyContext();
+  const format = useCurrencyFormat();
+  const currencySymbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? '$';
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
       {/* Expense Pie */}
@@ -115,7 +124,7 @@ export function Charts({ expensesByCategory, monthlyData }: ChartsProps) {
                   />
                 ))}
               </Pie>
-              <Tooltip content={<PieTooltip />} />
+              <Tooltip content={(props) => <PieTooltip {...(props as Parameters<typeof PieTooltip>[0])} formatter={format} />} />
               <Legend
                 iconType="circle"
                 iconSize={8}
@@ -154,11 +163,11 @@ export function Charts({ expensesByCategory, monthlyData }: ChartsProps) {
                 axisLine={false}
                 tickLine={false}
                 tickFormatter={(v: number) =>
-                  v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`
+                  v >= 1000 ? `${currencySymbol}${(v / 1000).toFixed(0)}k` : `${currencySymbol}${v}`
                 }
                 width={48}
               />
-              <Tooltip content={<BarTooltip />} cursor={{ fill: 'var(--rc-cursor)' }} />
+              <Tooltip content={(props) => <BarTooltip {...(props as Parameters<typeof BarTooltip>[0])} formatter={format} />} cursor={{ fill: 'var(--rc-cursor)' }} />
               <Legend
                 iconType="circle"
                 iconSize={8}

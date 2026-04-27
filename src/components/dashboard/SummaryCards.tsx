@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown, Wallet, Calendar } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
+import { useCurrencyContext } from '../../context/CurrencyContext';
 import type { SummaryData } from '../../types';
 
 interface SummaryCardsProps {
@@ -7,6 +8,7 @@ interface SummaryCardsProps {
 }
 
 export function SummaryCards({ summary }: SummaryCardsProps) {
+  const { currency } = useCurrencyContext();
   const cards = [
     {
       label: 'Net Balance',
@@ -60,7 +62,7 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
             </div>
           </div>
           <p className={`text-lg sm:text-2xl font-bold ${valueColor} tracking-tight`}>
-            {formatCurrency(value)}
+            {formatCurrency(value, currency)}
           </p>
         </div>
       ))}
