@@ -4,7 +4,8 @@ import { Modal } from '../ui/Modal';
 import { FileInputStep } from './FileInputStep';
 import { PreviewStep, type PreviewRow } from './PreviewStep';
 import { parseStatementText } from '../../utils/statementParser';
-import { categorize } from '../../utils/categorizer';
+import { categorize, categorizeFromSector } from '../../utils/categorizer';
+import type { XlsxTransaction } from '../../utils/xlsxParser';
 import type { Category, Transaction } from '../../types';
 
 interface StatementImportModalProps {
@@ -110,6 +111,34 @@ export function StatementImportModal({
     setStep('preview');
   };
 
+  // Called when an Excel file is parsed (bypasses OCR text flow)
+  const handleXlsxReady = (parsed: XlsxTransaction[]) => {
+    const rows: PreviewRow[] = parsed.map((p) => {
+      const type = p.isCredit ? 'income' : 'expense';
+      const availableCats = p.isCredit ? incomeCategories : expenseCategories;
+
+      // Try merchant-name keyword match first; fall back to Hebrew sector
+      let category = categorize(p.description, availableCats);
+      const fallback = availableCats.includes('Other') ? 'Other' : availableCats[0];
+      if (category === fallback && p.sector) {
+        category = categorizeFromSector(p.sector, availableCats);
+      }
+
+      return {
+        id: p.id,
+        selected: true,
+        date: p.date,
+        description: p.description,
+        category,
+        amount: p.amount,
+        type,
+      };
+    });
+
+    setPreviewRows(rows);
+    setStep('preview');
+  };
+
   // Called when user clicks "Import X transactions" in PreviewStep
   const handleConfirm = (selectedRows: PreviewRow[]) => {
     const transactions: Omit<Transaction, 'id' | 'createdAt'>[] = selectedRows.map(
@@ -149,7 +178,7 @@ export function StatementImportModal({
     >
       {step !== 'done' && <StepIndicator current={step} />}
 
-      {step === 'input' && <FileInputStep onReady={handleTextReady} />}
+      {step === 'input' && <FileInputStep onReady={handleTextReady} onXlsxReady={handleXlsxReady} />}
 
       {step === 'preview' && (
         <PreviewStep

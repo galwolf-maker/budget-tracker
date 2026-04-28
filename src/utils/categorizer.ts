@@ -251,6 +251,14 @@ const HEBREW_SECTOR_MAP: Record<string, string> = {
   'גז ביתי': 'Rent',
   'ביטוח': 'Rent',
 
+  // Compound sector strings common in Israeli Visa/Cal/Max exports
+  'תקשורת ומחשבים': 'Rent',
+  'רכב ותחבורה': 'Transport',
+  'פנאי בילוי': 'Entertainment',
+  'ריהוט ובית': 'Shopping',
+  'אנרגיה': 'Rent',
+  'רפואה ובריאות': 'Health',
+
   // Other
   'בנקים': 'Other',
   'בנקים ומוסדות פיננסים': 'Other',

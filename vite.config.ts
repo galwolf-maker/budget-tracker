@@ -12,6 +12,7 @@ export default defineConfig({
           'supabase-vendor': ['@supabase/supabase-js'],
           'pdf-vendor':      ['pdfjs-dist'],
           'ocr-vendor':      ['tesseract.js'],
+          'xlsx-vendor':     ['xlsx'],
         },
       },
     },

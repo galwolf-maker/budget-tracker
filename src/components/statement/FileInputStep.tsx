@@ -8,22 +8,28 @@ import {
   Info,
   Pencil,
   RotateCcw,
+  Table2,
 } from 'lucide-react';
 import { ocrProvider } from '../../services/ocr';
+import { parseXlsx } from '../../utils/xlsxParser';
 import type { OcrProgress } from '../../services/ocr/types';
+import type { XlsxTransaction } from '../../utils/xlsxParser';
 
 interface FileInputStepProps {
   onReady: (text: string) => void;
+  onXlsxReady: (rows: XlsxTransaction[]) => void;
 }
 
 type Phase =
   | { kind: 'idle' }
   | { kind: 'processing'; progress: number; status: string }
   | { kind: 'done'; confidence?: number; method?: string; pageCount?: number }
+  | { kind: 'xlsx-done'; count: number; rows: XlsxTransaction[] }
   | { kind: 'error'; message: string };
 
-const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
-const ACCEPTED_ATTR  = ACCEPTED_TYPES.join(',');
+const XLSX_TYPES     = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf', ...XLSX_TYPES];
+const ACCEPTED_ATTR  = [...ACCEPTED_TYPES, '.xlsx', '.xls'].join(',');
 
 // Hebrew Unicode block — used to detect RTL content
 const HEB_RE = /[\u0590-\u05FF\uFB1D-\uFB4F]/u;
@@ -46,7 +52,7 @@ const METHOD_LABEL: Record<string, string> = {
   'manual':          'Manual',
 };
 
-export function FileInputStep({ onReady }: FileInputStepProps) {
+export function FileInputStep({ onReady, onXlsxReady }: FileInputStepProps) {
   const [text, setText]         = useState('');
   const [fileName, setFileName] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -58,15 +64,36 @@ export function FileInputStep({ onReady }: FileInputStepProps) {
 
   // ── File handling ──────────────────────────────────────────────
   const processFile = useCallback(async (file: File) => {
-    if (!ACCEPTED_TYPES.includes(file.type)) {
-      setPhase({ kind: 'error', message: 'Unsupported file type. Please use PNG, JPG, WEBP, or PDF.' });
+    const isXlsx = XLSX_TYPES.includes(file.type) ||
+      file.name.toLowerCase().endsWith('.xlsx') ||
+      file.name.toLowerCase().endsWith('.xls');
+
+    if (!isXlsx && !ACCEPTED_TYPES.includes(file.type)) {
+      setPhase({ kind: 'error', message: 'Unsupported file type. Please use PNG, JPG, WEBP, PDF, or Excel (.xlsx).' });
       return;
     }
 
     setFileName(file.name);
     setText('');
-    setPhase({ kind: 'processing', progress: 0, status: 'Starting…' });
+    setPhase({ kind: 'processing', progress: 0, status: isXlsx ? 'Reading Excel file…' : 'Starting…' });
 
+    // ── Excel path ──────────────────────────────────────────────
+    if (isXlsx) {
+      try {
+        setPhase({ kind: 'processing', progress: 0.5, status: 'Parsing rows…' });
+        const rows = await parseXlsx(file);
+        if (rows.length === 0) {
+          setPhase({ kind: 'error', message: 'No transactions found in this file. Check that it contains Hebrew column headers.' });
+          return;
+        }
+        setPhase({ kind: 'xlsx-done', count: rows.length, rows });
+      } catch (err) {
+        setPhase({ kind: 'error', message: (err as Error).message });
+      }
+      return;
+    }
+
+    // ── OCR / PDF path (existing) ───────────────────────────────
     try {
       const result = await ocrProvider.extract(
         file,
@@ -74,10 +101,10 @@ export function FileInputStep({ onReady }: FileInputStepProps) {
       );
 
       setPhase({
-        kind:      'done',
+        kind:       'done',
         confidence: result.confidence,
-        method:    result.method,
-        pageCount: result.pageCount,
+        method:     result.method,
+        pageCount:  result.pageCount,
       });
       setText(result.text);
     } catch (err) {
@@ -105,6 +132,11 @@ export function FileInputStep({ onReady }: FileInputStepProps) {
 
   const processing = phase.kind === 'processing';
   const showRtlHint = text && isRTL(text);
+
+  // When xlsx parsing succeeds, go straight to preview
+  const handleXlsxContinue = () => {
+    if (phase.kind === 'xlsx-done') onXlsxReady(phase.rows);
+  };
 
   // ── Render ─────────────────────────────────────────────────────
   return (
@@ -134,10 +166,11 @@ export function FileInputStep({ onReady }: FileInputStepProps) {
             <ImageIcon size={26} />
             <UploadCloud size={30} className="text-slate-400" />
             <FileText size={26} />
+            <Table2 size={26} />
           </div>
           <div className="text-center">
             <p className="text-sm font-medium text-slate-700">Drop your statement here</p>
-            <p className="text-xs text-slate-400 mt-0.5">PNG · JPG · WEBP · PDF — click to browse</p>
+            <p className="text-xs text-slate-400 mt-0.5">PNG · JPG · WEBP · PDF · Excel (.xlsx)</p>
           </div>
         </div>
       )}
@@ -224,6 +257,37 @@ export function FileInputStep({ onReady }: FileInputStepProps) {
         </div>
       )}
 
+      {/* ── Excel parsed successfully ── */}
+      {phase.kind === 'xlsx-done' && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <CheckCircle size={18} className="text-emerald-500 shrink-0" />
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate flex-1">
+              {fileName}
+            </span>
+            <button
+              onClick={resetToIdle}
+              title="Upload a different file"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/60 transition-colors"
+            >
+              <RotateCcw size={14} />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Table2 size={14} className="text-emerald-600 shrink-0" />
+            <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+              Found {phase.count} transaction{phase.count !== 1 ? 's' : ''} — ready to review
+            </span>
+          </div>
+          <button
+            onClick={handleXlsxContinue}
+            className="w-full py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+          >
+            Review {phase.count} transactions →
+          </button>
+        </div>
+      )}
+
       {/* ── Error ── */}
       {phase.kind === 'error' && (
         <div className="flex items-start gap-2 text-sm bg-rose-50 border border-rose-200 text-rose-700 rounded-xl px-3 py-2.5">
@@ -248,8 +312,8 @@ export function FileInputStep({ onReady }: FileInputStepProps) {
         </div>
       )}
 
-      {/* ── Text area ── */}
-      <div>
+      {/* ── Text area (hidden for xlsx, shown for OCR/PDF/manual) ── */}
+      {phase.kind !== 'xlsx-done' && <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
             <Pencil size={13} className="text-slate-400" />
@@ -287,18 +351,20 @@ export function FileInputStep({ onReady }: FileInputStepProps) {
         <p className="mt-1 text-xs text-slate-400">
           Each line should contain a date, description, and amount. You can edit before parsing.
         </p>
-      </div>
+      </div>}
 
       {/* ── Parse button ── */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleParse}
-          disabled={!text.trim() || processing}
-          className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          Parse transactions →
-        </button>
-      </div>
+      {phase.kind !== 'xlsx-done' && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleParse}
+            disabled={!text.trim() || processing}
+            className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Parse transactions →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
