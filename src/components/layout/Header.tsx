@@ -1,8 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  Plus, Download, Upload, Wallet, ChevronDown,
-  FileText, CreditCard, Sun, Moon,
-} from 'lucide-react';
+import { Plus, Download, Upload, Wallet, Sun, Moon } from 'lucide-react';
 import { UserMenu, SignInButton } from '../auth/UserMenu';
 import { useCurrencyContext, CURRENCIES } from '../../context/CurrencyContext';
 import type { Theme } from '../../hooks/useTheme';
@@ -14,8 +10,7 @@ interface HeaderProps {
   onToggleTheme: () => void;
   onAddTransaction: () => void;
   onExport: () => void;
-  onImportCSV: (content: string) => void;
-  onImportStatement: () => void;
+  onImportData: () => void;
   // Auth
   user: User | null;
   syncing: boolean;
@@ -26,39 +21,10 @@ interface HeaderProps {
 
 export function Header({
   title, theme, onToggleTheme,
-  onAddTransaction, onExport, onImportCSV, onImportStatement,
+  onAddTransaction, onExport, onImportData,
   user, syncing, isSupabaseConfigured, onSignIn, onSignOut,
 }: HeaderProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const { currency, setCurrency } = useCurrencyContext();
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
-
-  const handleCsvImport = () => {
-    setMenuOpen(false);
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv,text/csv';
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result;
-        if (typeof content === 'string') onImportCSV(content);
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-  };
 
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-b border-slate-200/80 dark:border-slate-700/80 px-4 sm:px-6 py-3.5">
@@ -110,44 +76,15 @@ export function Header({
             <span className="hidden sm:inline">Export</span>
           </button>
 
-          {/* Import dropdown */}
-          <div ref={menuRef} className="relative">
-            <button
-              onClick={() => setMenuOpen((o) => !o)}
-              title="Import data"
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-            >
-              <Upload size={15} />
-              <span className="hidden sm:inline">Import</span>
-              <ChevronDown size={12} className={`hidden sm:block transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {menuOpen && (
-              <div className="absolute right-0 top-[calc(100%+4px)] w-52 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden z-50 py-1">
-                <button
-                  onClick={handleCsvImport}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
-                >
-                  <FileText size={15} className="text-slate-400 shrink-0" />
-                  <div>
-                    <p className="font-medium">Import CSV</p>
-                    <p className="text-xs text-slate-400">Structured transaction file</p>
-                  </div>
-                </button>
-                <div className="h-px bg-slate-100 dark:bg-slate-700 mx-2" />
-                <button
-                  onClick={() => { setMenuOpen(false); onImportStatement(); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
-                >
-                  <CreditCard size={15} className="text-blue-500 shrink-0" />
-                  <div>
-                    <p className="font-medium">Import Statement</p>
-                    <p className="text-xs text-slate-400">PDF or image, auto-parsed</p>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
+          {/* Import */}
+          <button
+            onClick={onImportData}
+            title="Import data"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          >
+            <Upload size={15} />
+            <span className="hidden sm:inline">Import</span>
+          </button>
 
           {/* Auth */}
           {isSupabaseConfigured && (

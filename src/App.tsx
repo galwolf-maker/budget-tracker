@@ -4,7 +4,7 @@ import { Header } from './components/layout/Header';
 import { Modal } from './components/ui/Modal';
 import { ToastContainer } from './components/ui/Toast';
 import { TransactionForm } from './components/transactions/TransactionForm';
-import { StatementImportModal } from './components/statement/StatementImportModal';
+import { ImportModal } from './components/statement/ImportModal';
 import { AuthModal } from './components/auth/AuthModal';
 import { AuthCallback } from './components/auth/AuthCallback';
 import { HouseholdModal } from './components/household/HouseholdModal';
@@ -20,7 +20,7 @@ import { useAuth } from './hooks/useAuth';
 import { useHousehold } from './hooks/useHousehold';
 import { useCurrency } from './hooks/useCurrency';
 import { CurrencyContext } from './context/CurrencyContext';
-import { exportToCSV, parseCSV } from './utils/csv';
+import { exportToCSV } from './utils/csv';
 import type { ViewType, Transaction } from './types';
 import type { ToastData } from './components/ui/Toast';
 
@@ -44,7 +44,7 @@ export default function App() {
 
   const [activeView, setActiveView] = useState<ViewType>('home');
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isStatementOpen, setIsStatementOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isHouseholdOpen, setIsHouseholdOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -187,26 +187,13 @@ export default function App() {
     [deleteTransaction, toast]
   );
 
-  // ── CSV import/export ──────────────────────────────────────────────────
+  // ── Export / import ────────────────────────────────────────────────────
   const handleExport = useCallback(() => exportToCSV(transactions), [transactions]);
 
-  const handleImportCSV = useCallback(
-    (content: string) => {
-      try {
-        const rows = parseCSV(content, merchantRules);
-        importTransactions(rows);
-        toast('success', `Imported ${rows.length} transaction${rows.length !== 1 ? 's' : ''}.`);
-      } catch (err) {
-        toast('error', (err as Error).message);
-      }
-    },
-    [importTransactions, merchantRules, toast]
-  );
-
-  const handleStatementImport = useCallback(
+  const handleImport = useCallback(
     (rows: Omit<Transaction, 'id' | 'createdAt'>[]) => {
       importTransactions(rows);
-      toast('success', `Imported ${rows.length} transaction${rows.length !== 1 ? 's' : ''} from statement.`);
+      toast('success', `Imported ${rows.length} transaction${rows.length !== 1 ? 's' : ''}.`);
     },
     [importTransactions, toast]
   );
@@ -276,8 +263,7 @@ export default function App() {
           onToggleTheme={toggleTheme}
           onAddTransaction={openAdd}
           onExport={handleExport}
-          onImportCSV={handleImportCSV}
-          onImportStatement={() => setIsStatementOpen(true)}
+          onImportData={() => setIsImportOpen(true)}
           user={user}
           syncing={syncing}
           isSupabaseConfigured={isSupabaseConfigured}
@@ -339,12 +325,13 @@ export default function App() {
         />
       </Modal>
 
-      {/* Statement import */}
-      <StatementImportModal
-        isOpen={isStatementOpen}
-        onClose={() => setIsStatementOpen(false)}
+      {/* Import modal */}
+      <ImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
         categories={categories}
-        onImport={handleStatementImport}
+        merchantRules={merchantRules}
+        onImport={handleImport}
       />
 
       {/* Auth modal */}
