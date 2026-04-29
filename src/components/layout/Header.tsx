@@ -11,6 +11,7 @@ interface HeaderProps {
   onAddTransaction: () => void;
   onExport: () => void;
   onImportData: () => void;
+  isGuestMode?: boolean;
   // Auth
   user: User | null;
   syncing: boolean;
@@ -22,6 +23,7 @@ interface HeaderProps {
 export function Header({
   title, theme, onToggleTheme,
   onAddTransaction, onExport, onImportData,
+  isGuestMode = false,
   user, syncing, isSupabaseConfigured, onSignIn, onSignOut,
 }: HeaderProps) {
   const { currency, setCurrency } = useCurrencyContext();
@@ -67,24 +69,28 @@ export function Header({
           </button>
 
           {/* Export */}
-          <button
-            onClick={onExport}
-            title="Export as CSV"
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <Download size={15} />
-            <span className="hidden sm:inline">Export</span>
-          </button>
+          {!isGuestMode && (
+            <button
+              onClick={onExport}
+              title="Export as CSV"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <Download size={15} />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+          )}
 
           {/* Import */}
-          <button
-            onClick={onImportData}
-            title="Import data"
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <Upload size={15} />
-            <span className="hidden sm:inline">Import</span>
-          </button>
+          {!isGuestMode && (
+            <button
+              onClick={onImportData}
+              title="Import data"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <Upload size={15} />
+              <span className="hidden sm:inline">Import</span>
+            </button>
+          )}
 
           {/* Auth */}
           {isSupabaseConfigured && (
@@ -93,14 +99,16 @@ export function Header({
               : <SignInButton onClick={onSignIn} />
           )}
 
-          {/* Add transaction */}
-          <button
-            onClick={onAddTransaction}
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm shadow-blue-200 dark:shadow-none"
-          >
-            <Plus size={15} />
-            <span>Add</span>
-          </button>
+          {/* Add transaction — hidden in guest mode */}
+          {!isGuestMode && (
+            <button
+              onClick={onAddTransaction}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm shadow-blue-200 dark:shadow-none"
+            >
+              <Plus size={15} />
+              <span>Add</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

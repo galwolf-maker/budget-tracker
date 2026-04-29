@@ -1,4 +1,4 @@
-import { Plus, LayoutDashboard, ArrowLeftRight, TrendingUp, TrendingDown, Wallet, LogIn } from 'lucide-react';
+import { Plus, LayoutDashboard, ArrowLeftRight, TrendingUp, TrendingDown, Wallet, LogIn, FlaskConical } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
 import { useCurrencyContext } from '../context/CurrencyContext';
 import { TransactionItem } from '../components/transactions/TransactionItem';
@@ -12,6 +12,7 @@ interface HomeProps {
   onNavigate: (view: ViewType) => void;
   onAddTransaction: () => void;
   onSignIn: () => void;
+  onEnterGuestMode: () => void;
 }
 
 export function Home({
@@ -21,6 +22,7 @@ export function Home({
   onNavigate,
   onAddTransaction,
   onSignIn,
+  onEnterGuestMode,
 }: HomeProps) {
   const { currency } = useCurrencyContext();
   const fmt = (v: number) => formatCurrency(v, currency);
@@ -57,13 +59,16 @@ export function Home({
             <LogIn size={16} />
             Sign in to get started
           </button>
-          <button
-            onClick={() => onNavigate('dashboard')}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl transition-colors"
-          >
-            <LayoutDashboard size={16} />
-            Browse as guest
-          </button>
+          <div className="flex flex-col items-center gap-1">
+            <button
+              onClick={onEnterGuestMode}
+              className="flex items-center gap-2 px-6 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl transition-colors"
+            >
+              <FlaskConical size={16} />
+              Try Demo
+            </button>
+            <span className="text-xs text-slate-400 dark:text-slate-500">Explore with sample data — no signup required</span>
+          </div>
         </div>
       </div>
     );

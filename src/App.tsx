@@ -24,7 +24,15 @@ import { useAuth } from './hooks/useAuth';
 import { useHousehold } from './hooks/useHousehold';
 import { useCurrency } from './hooks/useCurrency';
 import { CurrencyContext } from './context/CurrencyContext';
+import { GuestModeContext } from './context/GuestModeContext';
 import { exportToCSV } from './utils/csv';
+import {
+  DEMO_TRANSACTIONS,
+  DEMO_CATEGORIES,
+  DEMO_SUMMARY,
+  DEMO_EXPENSES_BY_CATEGORY,
+  DEMO_MONTHLY_DATA,
+} from './demo/demoData';
 import type { ViewType, Transaction } from './types';
 import type { ToastData } from './components/ui/Toast';
 
@@ -47,6 +55,7 @@ export default function App() {
   });
 
   const [activeView, setActiveView] = useState<ViewType>('home');
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isRecurringReviewOpen, setIsRecurringReviewOpen] = useState(false);
@@ -100,7 +109,7 @@ export default function App() {
   } = useHousehold(userId, userEmail);
 
   const {
-    transactions,
+    transactions: realTransactions,
     syncing,
     addTransaction,
     updateTransaction,
@@ -109,14 +118,39 @@ export default function App() {
     markRecurring,
     recurringAutoAdded,
     clearRecurringAutoAdded,
-    getFilteredTransactions,
-    summary,
-    expensesByCategory,
-    monthlyData,
-  } = useTransactions(userId, householdId);
+    getFilteredTransactions: getRealFilteredTransactions,
+    summary: realSummary,
+    expensesByCategory: realExpensesByCategory,
+    monthlyData: realMonthlyData,
+  } = useTransactions(userId, householdId, isGuestMode);
 
-  const { categories, addCategory, deleteCategory, getCategoriesForType } =
-    useCategories(userId, householdId);
+  const { categories: realCategories, addCategory, deleteCategory, getCategoriesForType: getRealCategoriesForType } =
+    useCategories(userId, householdId, isGuestMode);
+
+  // In guest mode, serve demo data
+  const transactions = isGuestMode ? DEMO_TRANSACTIONS : realTransactions;
+  const summary = isGuestMode ? DEMO_SUMMARY : realSummary;
+  const expensesByCategory = isGuestMode ? DEMO_EXPENSES_BY_CATEGORY : realExpensesByCategory;
+  const monthlyData = isGuestMode ? DEMO_MONTHLY_DATA : realMonthlyData;
+  const categories = isGuestMode ? DEMO_CATEGORIES : realCategories;
+
+  const getFilteredTransactions = isGuestMode
+    ? (filters: Parameters<typeof getRealFilteredTransactions>[0]) => {
+        return DEMO_TRANSACTIONS.filter((t) => {
+          if (filters.type !== 'all' && t.type !== filters.type) return false;
+          if (filters.category && t.category !== filters.category) return false;
+          if (filters.month && filters.month !== 'all' && !t.date.startsWith(filters.month)) return false;
+          if (filters.search) {
+            const q = filters.search.toLowerCase();
+            if (!t.description.toLowerCase().includes(q) && !t.category.toLowerCase().includes(q) && !t.amount.toString().includes(q)) return false;
+          }
+          return true;
+        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      }
+    : getRealFilteredTransactions;
+  const getCategoriesForType = isGuestMode
+    ? (type: Parameters<typeof getRealCategoriesForType>[0]) => DEMO_CATEGORIES.filter((c) => c.type === type)
+    : getRealCategoriesForType;
 
   // ── Handle pending invite once user is signed in and household is ready ───
   useEffect(() => {
@@ -148,6 +182,7 @@ export default function App() {
   // ── Navigate to home + toast when user signs in ───────────────────────────
   useEffect(() => {
     if (!user) return;
+    setIsGuestMode(false);
     setIsAuthOpen(false);
     setActiveView('home');
     if (!pendingInviteToken) {
@@ -165,6 +200,17 @@ export default function App() {
       clearRecurringAutoAdded();
     }
   }, [recurringAutoAdded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Guest mode ────────────────────────────────────────────────────────
+  const handleEnterGuestMode = useCallback(() => {
+    setIsGuestMode(true);
+    setActiveView('dashboard');
+  }, []);
+
+  const exitGuestMode = useCallback(() => {
+    setIsGuestMode(false);
+    setActiveView('home');
+  }, []);
 
   // ── Toast helpers ──────────────────────────────────────────────────────
   const toast = useCallback((type: 'success' | 'error', message: string) => {
@@ -306,6 +352,7 @@ export default function App() {
   }
 
   return (
+    <GuestModeContext.Provider value={{ isGuestMode, exitGuestMode }}>
     <CurrencyContext.Provider value={{ currency, setCurrency }}>
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
       <Sidebar
@@ -316,6 +363,7 @@ export default function App() {
         syncing={syncing}
         memberCount={members.length}
         onOpenHousehold={user ? () => setIsHouseholdOpen(true) : undefined}
+        isGuestMode={isGuestMode}
       />
 
       <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
@@ -326,12 +374,28 @@ export default function App() {
           onAddTransaction={openAdd}
           onExport={handleExport}
           onImportData={() => setIsImportOpen(true)}
+          isGuestMode={isGuestMode}
           user={user}
           syncing={syncing}
           isSupabaseConfigured={isSupabaseConfigured}
           onSignIn={() => setIsAuthOpen(true)}
           onSignOut={signOut}
         />
+
+        {/* Demo mode banner */}
+        {isGuestMode && (
+          <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 px-4 sm:px-6 py-2 flex items-center justify-between gap-4">
+            <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+              Demo mode — sample data only, nothing is saved.
+            </p>
+            <button
+              onClick={() => setIsAuthOpen(true)}
+              className="text-xs font-semibold text-amber-800 dark:text-amber-300 hover:underline shrink-0"
+            >
+              Sign in →
+            </button>
+          </div>
+        )}
 
         <main className="flex-1 p-4 sm:p-6 pb-24 lg:pb-8">
           {activeView === 'home' && (
@@ -342,6 +406,7 @@ export default function App() {
               onNavigate={setActiveView}
               onAddTransaction={openAdd}
               onSignIn={() => setIsAuthOpen(true)}
+              onEnterGuestMode={handleEnterGuestMode}
             />
           )}
           {activeView === 'dashboard' && (
@@ -443,5 +508,6 @@ export default function App() {
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
     </CurrencyContext.Provider>
+    </GuestModeContext.Provider>
   );
 }

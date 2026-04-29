@@ -12,8 +12,9 @@ function readLS(): Category[] {
   } catch { return DEFAULT_CATEGORIES; }
 }
 
-export function useCategories(userId: string | null, householdId: string | null) {
-  const [categories, _set] = useState<Category[]>(readLS);
+export function useCategories(userId: string | null, householdId: string | null, isGuest = false) {
+  // In guest mode: use defaults — never read localStorage, never touch Supabase
+  const [categories, _set] = useState<Category[]>(() => isGuest ? DEFAULT_CATEGORIES : readLS());
 
   const setCategories = useCallback(
     (updater: Category[] | ((p: Category[]) => Category[])) => {
@@ -29,7 +30,7 @@ export function useCategories(userId: string | null, householdId: string | null)
   const lsSnapshotRef = useRef(readLS());
 
   useEffect(() => {
-    if (!userId || !supabase) return;
+    if (isGuest || !userId || !supabase) return;
     if (householdId === null) return;
 
     const migKey = `bt-cat-migrated-${userId}`;

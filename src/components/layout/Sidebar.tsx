@@ -1,4 +1,4 @@
-import { Home, LayoutDashboard, ArrowLeftRight, Tag, Wallet, Cloud, HardDrive, RefreshCw, Users } from 'lucide-react';
+import { Home, LayoutDashboard, ArrowLeftRight, Tag, Wallet, Cloud, HardDrive, RefreshCw, Users, Lock } from 'lucide-react';
 import type { ViewType } from '../../types';
 
 interface SidebarProps {
@@ -9,6 +9,7 @@ interface SidebarProps {
   syncing: boolean;
   memberCount?: number;
   onOpenHousehold?: () => void;
+  isGuestMode?: boolean;
 }
 
 const NAV_ITEMS = [
@@ -18,6 +19,8 @@ const NAV_ITEMS = [
   { id: 'categories' as ViewType, label: 'Categories', icon: Tag },
 ];
 
+const GUEST_LOCKED: ViewType[] = ['transactions', 'categories'];
+
 export function Sidebar({
   activeView,
   onNavigate,
@@ -26,6 +29,7 @@ export function Sidebar({
   syncing,
   memberCount = 0,
   onOpenHousehold,
+  isGuestMode = false,
 }: SidebarProps) {
   const storageLabel = !isSupabaseConfigured || !isSynced ? 'Local storage' : 'Synced to cloud';
   const StorageIcon = !isSupabaseConfigured || !isSynced ? HardDrive : Cloud;
@@ -54,18 +58,24 @@ export function Sidebar({
           <ul className="space-y-0.5">
             {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
               const active = activeView === id;
+              const locked = isGuestMode && GUEST_LOCKED.includes(id);
               return (
                 <li key={id}>
                   <button
-                    onClick={() => onNavigate(id)}
+                    onClick={() => !locked && onNavigate(id)}
+                    disabled={locked}
+                    title={locked ? 'Sign in to access' : undefined}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      active
+                      locked
+                        ? 'text-slate-600 cursor-not-allowed opacity-50'
+                        : active
                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
                     }`}
                   >
                     <Icon size={17} />
                     {label}
+                    {locked && <Lock size={12} className="ml-auto opacity-60" />}
                   </button>
                 </li>
               );
@@ -117,12 +127,18 @@ export function Sidebar({
         <ul className="flex">
           {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
             const active = activeView === id;
+            const locked = isGuestMode && GUEST_LOCKED.includes(id);
             return (
               <li key={id} className="flex-1">
                 <button
-                  onClick={() => onNavigate(id)}
+                  onClick={() => !locked && onNavigate(id)}
+                  disabled={locked}
                   className={`w-full flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors ${
-                    active ? 'text-blue-600' : 'text-slate-400 dark:text-slate-500'
+                    locked
+                      ? 'text-slate-300 dark:text-slate-600 opacity-50 cursor-not-allowed'
+                      : active
+                      ? 'text-blue-600'
+                      : 'text-slate-400 dark:text-slate-500'
                   }`}
                 >
                   <Icon size={20} />

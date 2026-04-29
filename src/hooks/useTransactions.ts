@@ -31,10 +31,16 @@ function readLS(): Transaction[] {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function useTransactions(userId: string | null, householdId: string | null) {
-  const [transactions, _set] = useState<Transaction[]>(readLS);
+export function useTransactions(userId: string | null, householdId: string | null, isGuest = false) {
+  // In guest mode: start empty — never read localStorage, never touch Supabase
+  const [transactions, _set] = useState<Transaction[]>(() => isGuest ? [] : readLS());
   const [syncing, setSyncing] = useState(false);
-  const [dataLoaded, setDataLoaded] = useState(!userId || !supabase);
+  const [dataLoaded, setDataLoaded] = useState(isGuest || !userId || !supabase);
+
+  // Clear real state if guest mode is entered after mount
+  useEffect(() => {
+    if (isGuest) _set([]);
+  }, [isGuest]);
   const [recurringAutoAdded, setRecurringAutoAdded] = useState(0);
 
   const setTransactions = useCallback(
@@ -52,7 +58,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
 
   // ── Load from / migrate to Supabase ─────────────────────────────────────────
   useEffect(() => {
-    if (!userId || !supabase) {
+    if (isGuest || !userId || !supabase) {
       setDataLoaded(true);
       return;
     }
@@ -112,7 +118,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
 
   // ── Real-time subscription ────────────────────────────────────────────────
   useEffect(() => {
-    if (!userId || !supabase || !householdId) return;
+    if (isGuest || !userId || !supabase || !householdId) return;
     const sb = supabase;
 
     const channel = sb
@@ -251,7 +257,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
   txnsRef.current = transactions;
 
   useEffect(() => {
-    if (!dataLoaded || autoApplied.current) return;
+    if (!dataLoaded || autoApplied.current || isGuest) return;
     autoApplied.current = true;
 
     const month = currentYearMonth();
