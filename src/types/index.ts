@@ -10,6 +10,7 @@ export interface Transaction {
   description: string;
   createdAt: string; // ISO timestamp
   isRecurring?: boolean;
+  recurringFrequency?: 'monthly' | 'weekly';
   createdBy?: string; // user_id of who added it
 }
 

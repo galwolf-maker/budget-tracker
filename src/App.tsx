@@ -482,6 +482,7 @@ export default function App() {
         onClose={() => setIsImportOpen(false)}
         categories={categories}
         merchantRules={merchantRules}
+        existingTransactions={isGuestMode ? undefined : realTransactions}
         onImport={handleImport}
       />
 

@@ -18,6 +18,7 @@ interface ImportModalProps {
   onClose: () => void;
   categories: Category[];
   merchantRules: Record<string, string>;
+  existingTransactions?: Transaction[];
   onImport: (transactions: Omit<Transaction, 'id' | 'createdAt'>[]) => void;
 }
 
@@ -46,7 +47,7 @@ function confidenceUi(conf: number) {
   return               { label: 'Low',    badge: 'bg-rose-50   text-rose-700   border-rose-200'   };
 }
 
-export function ImportModal({ isOpen, onClose, categories, merchantRules, onImport }: ImportModalProps) {
+export function ImportModal({ isOpen, onClose, categories, merchantRules, existingTransactions = [], onImport }: ImportModalProps) {
   const [step, setStep]                 = useState<Step>('choose');
   const [dragging, setDragging]         = useState(false);
   const [uploadProgress, setProgress]   = useState(0);
@@ -208,7 +209,13 @@ export function ImportModal({ isOpen, onClose, categories, merchantRules, onImpo
 
   const handleConfirm = (selectedRows: PreviewRow[]) => {
     const transactions: Omit<Transaction, 'id' | 'createdAt'>[] = selectedRows.map(r => ({
-      type: r.type, amount: r.amount, category: r.category, date: r.date, description: r.description,
+      type: r.type,
+      amount: r.amount,
+      category: r.category,
+      date: r.date,
+      description: r.description,
+      isRecurring: r.isRecurring ?? false,
+      recurringFrequency: r.recurringFrequency,
     }));
     onImport(transactions);
     setCount(transactions.length);
@@ -414,6 +421,7 @@ export function ImportModal({ isOpen, onClose, categories, merchantRules, onImpo
         <PreviewStep
           rows={previewRows}
           categories={categories}
+          existingTransactions={existingTransactions}
           onConfirm={handleConfirm}
           onBack={() => setStep(previewBack)}
         />
