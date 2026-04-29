@@ -26,7 +26,7 @@ import { useHousehold } from './hooks/useHousehold';
 import { useCurrency } from './hooks/useCurrency';
 import { CurrencyContext } from './context/CurrencyContext';
 import { GuestModeContext } from './context/GuestModeContext';
-import { exportToCSV } from './utils/csv';
+import { exportToXlsx } from './utils/exportXlsx';
 import {
   DEMO_TRANSACTIONS,
   DEMO_CATEGORIES,
@@ -306,7 +306,7 @@ export default function App() {
   );
 
   // ── Export / import ────────────────────────────────────────────────────
-  const handleExport = useCallback(() => exportToCSV(transactions), [transactions]);
+  const handleExport = useCallback(() => exportToXlsx(transactions), [transactions]);
 
   const handleImport = useCallback(
     (rows: Omit<Transaction, 'id' | 'createdAt'>[]) => {

@@ -72,7 +72,7 @@ export function Header({
           {!isGuestMode && (
             <button
               onClick={onExport}
-              title="Export as CSV"
+              title="Export as Excel (.xlsx)"
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
             >
               <Download size={15} />
