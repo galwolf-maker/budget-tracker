@@ -2,12 +2,15 @@ import { Plus } from 'lucide-react';
 import { SummaryCards } from '../components/dashboard/SummaryCards';
 import { Charts } from '../components/dashboard/Charts';
 import { InsightsPanel } from '../components/dashboard/InsightsPanel';
+import { CategoryTrendChart } from '../components/dashboard/CategoryTrendChart';
+import { SmartAlertsPanel } from '../components/smart/SmartAlertsPanel';
 import { TransactionItem } from '../components/transactions/TransactionItem';
 import type {
   SummaryData,
   Transaction,
   CategoryDataPoint,
   MonthlyDataPoint,
+  Category,
 } from '../types';
 
 interface DashboardProps {
@@ -16,7 +19,12 @@ interface DashboardProps {
   monthlyData: MonthlyDataPoint[];
   recentTransactions: Transaction[];
   allTransactions: Transaction[];
+  categories: Category[];
+  recurringCount: number;
+  duplicateCount: number;
   onAddTransaction: () => void;
+  onReviewRecurring: () => void;
+  onReviewDuplicates: () => void;
 }
 
 export function Dashboard({
@@ -25,15 +33,31 @@ export function Dashboard({
   monthlyData,
   recentTransactions,
   allTransactions,
+  categories,
+  recurringCount,
+  duplicateCount,
   onAddTransaction,
+  onReviewRecurring,
+  onReviewDuplicates,
 }: DashboardProps) {
   const isEmpty = recentTransactions.length === 0;
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <SummaryCards summary={summary} />
+
+      <SmartAlertsPanel
+        recurringCount={recurringCount}
+        duplicateCount={duplicateCount}
+        onReviewRecurring={onReviewRecurring}
+        onReviewDuplicates={onReviewDuplicates}
+      />
+
       <InsightsPanel transactions={allTransactions} />
+
       <Charts expensesByCategory={expensesByCategory} monthlyData={monthlyData} />
+
+      <CategoryTrendChart transactions={allTransactions} categories={categories} />
 
       {/* Recent Transactions */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">

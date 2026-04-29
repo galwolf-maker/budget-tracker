@@ -1,10 +1,14 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { Modal } from './components/ui/Modal';
 import { ToastContainer } from './components/ui/Toast';
 import { TransactionForm } from './components/transactions/TransactionForm';
 import { ImportModal } from './components/statement/ImportModal';
+import { RecurringReviewModal } from './components/smart/RecurringReviewModal';
+import { DuplicateReviewModal } from './components/smart/DuplicateReviewModal';
+import { detectRecurring, type RecurringCandidate } from './utils/recurringDetector';
+import { detectDuplicates } from './utils/duplicateDetector';
 import { AuthModal } from './components/auth/AuthModal';
 import { AuthCallback } from './components/auth/AuthCallback';
 import { HouseholdModal } from './components/household/HouseholdModal';
@@ -45,6 +49,18 @@ export default function App() {
   const [activeView, setActiveView] = useState<ViewType>('home');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isRecurringReviewOpen, setIsRecurringReviewOpen] = useState(false);
+  const [isDuplicateReviewOpen, setIsDuplicateReviewOpen] = useState(false);
+
+  // ── Smart detection: dismissed/ignored state persisted to localStorage ───────
+  const [dismissedRecurringKeys, setDismissedRecurringKeys] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('bt-dismissed-recurring') ?? '[]') as string[]); }
+    catch { return new Set(); }
+  });
+  const [ignoredDuplicatePairs, setIgnoredDuplicatePairs] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('bt-ignored-dupes') ?? '[]') as string[]); }
+    catch { return new Set(); }
+  });
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isHouseholdOpen, setIsHouseholdOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -187,6 +203,52 @@ export default function App() {
     [deleteTransaction, toast]
   );
 
+  // ── Smart detection ────────────────────────────────────────────────────
+  const recurringCandidates = useMemo(
+    () => detectRecurring(transactions, dismissedRecurringKeys),
+    [transactions, dismissedRecurringKeys]
+  );
+  const duplicateGroups = useMemo(
+    () => detectDuplicates(transactions, ignoredDuplicatePairs),
+    [transactions, ignoredDuplicatePairs]
+  );
+
+  const handleMarkRecurringCandidate = useCallback(
+    (candidate: RecurringCandidate) => {
+      markRecurring(candidate.occurrences[0].id, true);
+      setDismissedRecurringKeys(prev => {
+        const next = new Set(prev); next.add(candidate.key);
+        localStorage.setItem('bt-dismissed-recurring', JSON.stringify([...next]));
+        return next;
+      });
+    },
+    [markRecurring]
+  );
+
+  const handleDismissRecurring = useCallback((key: string) => {
+    setDismissedRecurringKeys(prev => {
+      const next = new Set(prev); next.add(key);
+      localStorage.setItem('bt-dismissed-recurring', JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
+  const handleKeepBothDuplicate = useCallback((pairId: string) => {
+    setIgnoredDuplicatePairs(prev => {
+      const next = new Set(prev); next.add(pairId);
+      localStorage.setItem('bt-ignored-dupes', JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
+  const handleDeleteDuplicate = useCallback(
+    (txnId: string, pairId: string) => {
+      deleteTransaction(txnId);
+      handleKeepBothDuplicate(pairId);
+    },
+    [deleteTransaction, handleKeepBothDuplicate]
+  );
+
   // ── Export / import ────────────────────────────────────────────────────
   const handleExport = useCallback(() => exportToCSV(transactions), [transactions]);
 
@@ -289,7 +351,12 @@ export default function App() {
               monthlyData={monthlyData}
               recentTransactions={recentTransactions}
               allTransactions={transactions}
+              categories={categories}
+              recurringCount={recurringCandidates.length}
+              duplicateCount={duplicateGroups.length}
               onAddTransaction={openAdd}
+              onReviewRecurring={() => setIsRecurringReviewOpen(true)}
+              onReviewDuplicates={() => setIsDuplicateReviewOpen(true)}
             />
           )}
           {activeView === 'transactions' && (
@@ -354,6 +421,24 @@ export default function App() {
           onInvite={inviteUser}
         />
       )}
+
+      {/* Recurring review */}
+      <RecurringReviewModal
+        isOpen={isRecurringReviewOpen}
+        onClose={() => setIsRecurringReviewOpen(false)}
+        candidates={recurringCandidates}
+        onMarkRecurring={handleMarkRecurringCandidate}
+        onDismiss={handleDismissRecurring}
+      />
+
+      {/* Duplicate review */}
+      <DuplicateReviewModal
+        isOpen={isDuplicateReviewOpen}
+        onClose={() => setIsDuplicateReviewOpen(false)}
+        groups={duplicateGroups}
+        onKeepBoth={handleKeepBothDuplicate}
+        onDeleteDuplicate={handleDeleteDuplicate}
+      />
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { TrendingUp, TrendingDown, AlertCircle, Zap, Star } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertCircle, Star } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 import { useCurrencyContext } from '../../context/CurrencyContext';
 import type { Transaction } from '../../types';
@@ -113,30 +113,6 @@ export function InsightsPanel({ transactions }: InsightsPanelProps) {
         icon: <AlertCircle size={14} />,
         text: `Unusually large ${t.category} charge: ${fmt(t.amount)}${t.description ? ` — "${t.description}"` : ''}.`,
         kind: 'warn',
-      });
-    }
-
-    // ── Recurring suggestion ──────────────────────────────────────
-    const monthSet: Record<string, Set<string>> = {};
-    for (const t of transactions) {
-      if (t.type !== 'expense' || t.isRecurring) continue;
-      const key = `${t.description.trim().toLowerCase()}|${t.amount}`;
-      if (!monthSet[key]) monthSet[key] = new Set();
-      monthSet[key].add(t.date.slice(0, 7));
-    }
-    const candidates = Object.entries(monthSet)
-      .filter(([, months]) => months.size >= 3)
-      .map(([key]) => key.split('|')[0]);
-
-    if (candidates.length > 0) {
-      const names = candidates
-        .slice(0, 2)
-        .map((n) => `"${n}"`)
-        .join(' and ');
-      result.push({
-        icon: <Zap size={14} />,
-        text: `${names} appear monthly — consider marking ${candidates.length === 1 ? 'it' : 'them'} as recurring.`,
-        kind: 'neutral',
       });
     }
 
