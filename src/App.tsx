@@ -51,12 +51,15 @@ export default function App() {
     return params.get('reset') === '1' || window.location.hash.includes('type=recovery');
   });
 
-  // Detect email confirmation callback
+  // Detect auth callback — either the /auth/callback path (Google OAuth) or
+  // query params from email confirmation / hash from legacy implicit flow
   const [isAuthCallback] = useState(() => {
     if (new URLSearchParams(window.location.search).get('reset') === '1') return false;
     if (window.location.hash.includes('type=recovery')) return false;
     const params = new URLSearchParams(window.location.search);
+    const isCallbackPath = window.location.pathname.includes('/auth/callback');
     return (
+      isCallbackPath ||
       params.has('code') ||
       params.has('error') ||
       window.location.hash.startsWith('#access_token=')
