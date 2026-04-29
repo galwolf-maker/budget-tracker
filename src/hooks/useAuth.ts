@@ -11,6 +11,7 @@ export interface UseAuthReturn {
   signUpWithEmail: (email: string, password: string) => Promise<{ error: string | null; needsConfirmation: boolean }>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  resetPasswordForEmail: (email: string) => Promise<string | null>;
 }
 
 export function useAuth(): UseAuthReturn {
@@ -60,6 +61,13 @@ export function useAuth(): UseAuthReturn {
     await supabase!.auth.signOut();
   };
 
+  const resetPasswordForEmail = async (email: string): Promise<string | null> => {
+    const { error } = await supabase!.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}?reset=1`,
+    });
+    return error?.message ?? null;
+  };
+
   return {
     user,
     authLoading,
@@ -68,5 +76,6 @@ export function useAuth(): UseAuthReturn {
     signUpWithEmail,
     signInWithGoogle,
     signOut,
+    resetPasswordForEmail,
   };
 }

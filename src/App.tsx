@@ -11,6 +11,7 @@ import { detectRecurring, type RecurringCandidate } from './utils/recurringDetec
 import { detectDuplicates } from './utils/duplicateDetector';
 import { AuthModal } from './components/auth/AuthModal';
 import { AuthCallback } from './components/auth/AuthCallback';
+import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 import { HouseholdModal } from './components/household/HouseholdModal';
 import { Home } from './views/Home';
 import { Dashboard } from './views/Dashboard';
@@ -44,8 +45,16 @@ const VIEW_TITLES: Record<ViewType, string> = {
 };
 
 export default function App() {
-  // Detect Supabase email confirmation callback in the URL
+  // Detect password reset callback (redirectTo includes ?reset=1, or hash has type=recovery)
+  const [isPasswordReset] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('reset') === '1' || window.location.hash.includes('type=recovery');
+  });
+
+  // Detect email confirmation callback
   const [isAuthCallback] = useState(() => {
+    if (new URLSearchParams(window.location.search).get('reset') === '1') return false;
+    if (window.location.hash.includes('type=recovery')) return false;
     const params = new URLSearchParams(window.location.search);
     return (
       params.has('code') ||
@@ -92,6 +101,7 @@ export default function App() {
     signUpWithEmail,
     signInWithGoogle,
     signOut,
+    resetPasswordForEmail,
   } = useAuth();
 
   const userId = user?.id ?? null;
@@ -315,6 +325,15 @@ export default function App() {
     )
     .slice(0, 5);
 
+  // ── Password reset page ───────────────────────────────────────────────────
+  if (isPasswordReset) {
+    return (
+      <CurrencyContext.Provider value={{ currency, setCurrency }}>
+        <ResetPasswordPage onDone={() => window.location.replace('/')} />
+      </CurrencyContext.Provider>
+    );
+  }
+
   // ── Email confirmation callback ───────────────────────────────────────────
   if (isAuthCallback) {
     return (
@@ -473,6 +492,7 @@ export default function App() {
         signInWithEmail={signInWithEmail}
         signUpWithEmail={signUpWithEmail}
         signInWithGoogle={signInWithGoogle}
+        resetPasswordForEmail={resetPasswordForEmail}
       />
 
       {/* Household modal */}

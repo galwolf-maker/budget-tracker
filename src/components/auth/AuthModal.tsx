@@ -7,6 +7,7 @@ interface AuthModalProps {
   signInWithEmail: (email: string, password: string) => Promise<string | null>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: string | null; needsConfirmation: boolean }>;
   signInWithGoogle: () => Promise<void>;
+  resetPasswordForEmail: (email: string) => Promise<string | null>;
 }
 
 type Tab = 'signin' | 'signup';
@@ -17,6 +18,7 @@ export function AuthModal({
   signInWithEmail,
   signUpWithEmail,
   signInWithGoogle,
+  resetPasswordForEmail,
 }: AuthModalProps) {
   const [tab, setTab] = useState<Tab>('signin');
   const [email, setEmail] = useState('');
@@ -26,6 +28,8 @@ export function AuthModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState(false);
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   if (!isOpen) return null;
 
@@ -36,11 +40,24 @@ export function AuthModal({
     setError(null);
     setConfirmation(false);
     setLoading(false);
+    setForgotPassword(false);
+    setResetSent(false);
   };
 
   const switchTab = (t: Tab) => {
     setTab(t);
     reset();
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.includes('@')) { setError('Enter a valid email address.'); return; }
+    setLoading(true);
+    setError(null);
+    const err = await resetPasswordForEmail(email);
+    setLoading(false);
+    if (err) setError(err);
+    else setResetSent(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,20 +117,72 @@ export function AuthModal({
           {confirmation ? (
             <div className="text-center space-y-3 py-4">
               <div className="text-4xl">📧</div>
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                Check your email
-              </p>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Check your email</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 We sent a confirmation link to <strong>{email}</strong>.
                 Click it to finish signing up, then come back here.
               </p>
-              <button
-                onClick={() => { switchTab('signin'); }}
-                className="text-xs text-blue-600 hover:underline"
-              >
+              <button onClick={() => switchTab('signin')} className="text-xs text-blue-600 hover:underline">
                 Back to sign in
               </button>
             </div>
+
+          ) : resetSent ? (
+            <div className="text-center space-y-3 py-4">
+              <div className="text-4xl">📬</div>
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Check your email</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                We sent a password reset link to <strong>{email}</strong>.
+                The link expires in 1 hour.
+              </p>
+              <button onClick={() => { setResetSent(false); setForgotPassword(false); setError(null); }}
+                className="text-xs text-blue-600 hover:underline">
+                Back to sign in
+              </button>
+            </div>
+
+          ) : forgotPassword ? (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-1">Reset your password</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Enter your email and we'll send you a reset link.
+                </p>
+              </div>
+              <form onSubmit={handleForgotPassword} className="space-y-3">
+                <div className="relative">
+                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Email address"
+                    autoComplete="email"
+                    required
+                    className={inputBase}
+                  />
+                </div>
+                {error && (
+                  <p className="text-xs text-rose-500 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg px-3 py-2">
+                    {error}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Sending…' : 'Send reset link'}
+                </button>
+              </form>
+              <button
+                onClick={() => { setForgotPassword(false); setError(null); }}
+                className="w-full text-center text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                ← Back to sign in
+              </button>
+            </div>
+
           ) : (
             <>
               {/* Tab switcher */}
@@ -187,6 +256,19 @@ export function AuthModal({
                     {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
+
+                {/* Forgot password link (sign in only) */}
+                {tab === 'signin' && (
+                  <div className="text-right -mt-1">
+                    <button
+                      type="button"
+                      onClick={() => { setForgotPassword(true); setError(null); }}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
 
                 {/* Confirm password (sign up only) */}
                 {tab === 'signup' && (
