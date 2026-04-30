@@ -98,12 +98,25 @@ export function useWorkspace(
 
         console.log('[BT:workspace] Raw member rows:', memberRows);
 
-        const fetched: Workspace[] = ((memberRows ?? []) as Array<{
+        type HouseholdJoin = {
+          id: string;
+          name: string;
+          type: string | null;
+          created_by: string;
+        };
+
+        type MemberRow = {
           household_id: string;
-          households: { id: string; name: string; type: string | null; created_by: string } | null;
-        }>)
+          households: HouseholdJoin | HouseholdJoin[] | null;
+        };
+
+        const fetched: Workspace[] = ((memberRows ?? []) as MemberRow[])
           .map((r) => {
-            const hh = r.households;
+            // PostgREST may return the joined row as an object or a single-element array
+            const hhRaw = r.households;
+            const hh: HouseholdJoin | null = Array.isArray(hhRaw)
+              ? (hhRaw[0] ?? null)
+              : hhRaw;
             if (!hh) return null;
             const ws: Workspace = {
               id:          hh.id,
