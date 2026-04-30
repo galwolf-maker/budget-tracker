@@ -1,5 +1,5 @@
-import { Home, LayoutDashboard, ArrowLeftRight, Tag, Wallet, Cloud, HardDrive, RefreshCw, Users, Lock } from 'lucide-react';
-import type { ViewType } from '../../types';
+import { Home, LayoutDashboard, ArrowLeftRight, Tag, Wallet, Cloud, HardDrive, RefreshCw, Users, Lock, User, Plus, Settings } from 'lucide-react';
+import type { ViewType, Workspace } from '../../types';
 
 interface SidebarProps {
   activeView: ViewType;
@@ -7,8 +7,11 @@ interface SidebarProps {
   isSupabaseConfigured: boolean;
   isSynced: boolean;
   syncing: boolean;
-  memberCount?: number;
-  onOpenHousehold?: () => void;
+  workspaces?: Workspace[];
+  activeWorkspaceId?: string | null;
+  onSwitchWorkspace?: (id: string) => void;
+  onCreateWorkspace?: () => void;
+  onOpenWorkspace?: () => void;
   isGuestMode?: boolean;
 }
 
@@ -27,13 +30,69 @@ export function Sidebar({
   isSupabaseConfigured,
   isSynced,
   syncing,
-  memberCount = 0,
-  onOpenHousehold,
+  workspaces = [],
+  activeWorkspaceId,
+  onSwitchWorkspace,
+  onCreateWorkspace,
+  onOpenWorkspace,
   isGuestMode = false,
 }: SidebarProps) {
   const storageLabel = !isSupabaseConfigured || !isSynced ? 'Local storage' : 'Synced to cloud';
   const StorageIcon = !isSupabaseConfigured || !isSynced ? HardDrive : Cloud;
   const dotColor = !isSupabaseConfigured || !isSynced ? 'bg-slate-500' : 'bg-emerald-500';
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
+
+  const WorkspaceSwitcher = () => (
+    <div className="mt-4 pt-4 border-t border-slate-700/60">
+      <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+        Workspace
+      </p>
+      <ul className="space-y-0.5">
+        {workspaces.map((ws) => {
+          const WsIcon = ws.type === 'personal' ? User : Users;
+          const isActive = ws.id === activeWorkspaceId;
+          return (
+            <li key={ws.id}>
+              <button
+                onClick={() => onSwitchWorkspace?.(ws.id)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-slate-700 text-white'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                }`}
+              >
+                <WsIcon size={15} className="shrink-0" />
+                <span className="flex-1 text-left truncate">{ws.name}</span>
+                {ws.type === 'shared' && ws.memberCount > 1 && (
+                  <span className="text-[10px] bg-slate-600 text-slate-300 rounded-full px-1.5 py-0.5 font-medium">
+                    {ws.memberCount}
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {onCreateWorkspace && (
+        <button
+          onClick={onCreateWorkspace}
+          className="w-full flex items-center gap-2 px-3 py-2 mt-1 text-sm text-slate-500 hover:text-slate-300 transition-colors rounded-xl hover:bg-slate-800"
+        >
+          <Plus size={14} />
+          New shared workspace
+        </button>
+      )}
+      {activeWorkspace?.type === 'shared' && onOpenWorkspace && (
+        <button
+          onClick={onOpenWorkspace}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-500 hover:text-slate-300 transition-colors rounded-xl hover:bg-slate-800"
+        >
+          <Settings size={14} />
+          Manage members
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -51,7 +110,7 @@ export function Sidebar({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4">
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
             Menu
           </p>
@@ -82,26 +141,7 @@ export function Sidebar({
             })}
           </ul>
 
-          {/* Household button */}
-          {onOpenHousehold && (
-            <div className="mt-4 pt-4 border-t border-slate-700/60">
-              <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-                Household
-              </p>
-              <button
-                onClick={onOpenHousehold}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-all"
-              >
-                <Users size={17} />
-                <span>Members</span>
-                {memberCount > 0 && (
-                  <span className="ml-auto text-xs bg-slate-700 text-slate-300 rounded-full px-1.5 py-0.5 font-medium">
-                    {memberCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          )}
+          {workspaces.length > 0 && <WorkspaceSwitcher />}
         </nav>
 
         {/* Storage indicator footer */}
@@ -147,17 +187,17 @@ export function Sidebar({
               </li>
             );
           })}
-          {onOpenHousehold && (
+          {activeWorkspace?.type === 'shared' && onOpenWorkspace && (
             <li className="flex-1">
               <button
-                onClick={onOpenHousehold}
+                onClick={onOpenWorkspace}
                 className="w-full flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-slate-400 dark:text-slate-500 transition-colors relative"
               >
                 <Users size={20} />
-                House
-                {memberCount > 1 && (
+                Members
+                {activeWorkspace.memberCount > 1 && (
                   <span className="absolute top-1.5 right-3 w-4 h-4 bg-blue-600 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
-                    {memberCount}
+                    {activeWorkspace.memberCount}
                   </span>
                 )}
               </button>

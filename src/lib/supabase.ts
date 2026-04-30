@@ -50,6 +50,7 @@ export interface CatRow {
 export interface HouseholdRow {
   id: string;
   name: string;
+  type: 'personal' | 'shared';
   created_by: string;
   created_at: string;
 }

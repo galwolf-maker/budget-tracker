@@ -22,6 +22,13 @@ export interface HouseholdMember {
   joinedAt: string;
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  type: 'personal' | 'shared';
+  memberCount: number;
+}
+
 export interface Category {
   id: string;
   name: string;
