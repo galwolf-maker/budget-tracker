@@ -139,21 +139,47 @@ export function useWorkspace(
           }
         }
 
-        const fetched: Workspace[] = householdRows
-          .map((hh) => {
-            const ws: Workspace = {
-              id:          hh.id,
-              name:        hh.name,
-              type:        (hh.type ?? 'shared') as 'personal' | 'shared',
-              memberCount: 1,
-            };
-            console.log('[BT:workspace] Found workspace:', ws.name, '| type:', ws.type, '| id:', ws.id);
-            return ws;
-          });
+        // ── Deduplicate by ID (guards against duplicate DB rows created during ──
+        // previous 500-error loops where personal workspace was re-created each
+        // load). For personal workspaces prefer the one matching savedId so the
+        // user's previously active workspace "wins".
+        const savedId = localStorage.getItem(lsKey(userId));
+        const seenIds = new Set<string>();
+        const allMapped: Workspace[] = householdRows.map((hh) => ({
+          id:          hh.id,
+          name:        hh.name,
+          type:        (hh.type ?? 'shared') as 'personal' | 'shared',
+          memberCount: 1,
+        }));
+
+        // Sort so the savedId (preferred) or most-recently-seen personal comes first
+        // before we deduplicate, ensuring the "right" one survives.
+        allMapped.sort((a, b) => {
+          if (a.id === savedId) return -1;
+          if (b.id === savedId) return 1;
+          return 0;
+        });
+
+        const fetched: Workspace[] = allMapped.filter((ws) => {
+          if (seenIds.has(ws.id)) return false;
+          seenIds.add(ws.id);
+          return true;
+        });
+
+        if (allMapped.length !== fetched.length) {
+          console.warn('[BT:workspace] Deduplicated workspace list from', allMapped.length, 'to', fetched.length,
+            '— duplicate household rows exist in DB for this user');
+        }
+
+        fetched.forEach((ws) =>
+          console.log('[BT:workspace] Found workspace:', ws.name, '| type:', ws.type, '| id:', ws.id)
+        );
 
         // ── Ensure personal workspace exists ──────────────────────────────────
+        // Guard: only create if NONE exist — avoids re-creating on transient errors.
         let personalWs = fetched.find((w) => w.type === 'personal');
-        console.log('[BT:workspace] Personal workspace found?', !!personalWs);
+        console.log('[BT:workspace] Personal workspace found?', !!personalWs,
+          personalWs ? `(id: ${personalWs.id})` : '');
 
         if (!personalWs) {
           const personalName = userEmail ? `${userEmail}'s workspace` : 'Personal';
@@ -223,7 +249,6 @@ export function useWorkspace(
         console.log('[BT:workspace] Final workspace list:', fetched.map((w) => `${w.name} (${w.type})`));
         setWorkspaces(fetched);
 
-        const savedId = localStorage.getItem(lsKey(userId));
         const validSaved = savedId && fetched.some((w) => w.id === savedId);
         const targetId = validSaved ? savedId : (personalWs?.id ?? fetched[0]?.id ?? null);
         console.log('[BT:workspace] Active workspace →', targetId, validSaved ? '(saved)' : '(default)');
