@@ -89,10 +89,10 @@ export default function App() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
-  // ── Invite token from URL ──────────────────────────────────────────────────
-  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(() => {
+  // ── Pending workspace join from URL (?join=<workspaceId>) ─────────────────
+  const [pendingJoinId, setPendingJoinId] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('invite');
+    return params.get('join');
   });
 
   const { theme, toggleTheme } = useTheme();
@@ -121,8 +121,8 @@ export default function App() {
     members,
     workspaceLoading,
     setActiveWorkspaceId,
-    inviteUser,
-    acceptInvite,
+    getJoinUrl,
+    joinWorkspace,
     createSharedWorkspace,
   } = useWorkspace(userId, userEmail);
 
@@ -172,31 +172,37 @@ export default function App() {
     ? (type: Parameters<typeof getRealCategoriesForType>[0]) => DEMO_CATEGORIES.filter((c) => c.type === type)
     : getRealCategoriesForType;
 
-  // ── Handle pending invite once user is signed in and household is ready ───
+  // ── Execute the join once the user is signed in and workspaces are loaded ─
   useEffect(() => {
-    if (!pendingInviteToken || !userId || workspaceLoading) return;
+    if (!pendingJoinId || !userId || workspaceLoading) return;
 
+    // Remove ?join= from the URL immediately so a reload doesn't re-trigger
     const url = new URL(window.location.href);
-    url.searchParams.delete('invite');
+    url.searchParams.delete('join');
     window.history.replaceState({}, '', url.toString());
 
+    const idToJoin = pendingJoinId;
+    setPendingJoinId(null);
+
+    console.log('[BT] Executing pending workspace join for id:', idToJoin);
+
     (async () => {
-      const error = await acceptInvite(pendingInviteToken);
-      setPendingInviteToken(null);
-      if (error) {
-        toast('error', `Could not join workspace: ${error}`);
+      const result = await joinWorkspace(idToJoin);
+      if ('error' in result) {
+        toast('error', `Could not join workspace: ${result.error}`);
       } else {
-        toast('success', 'You joined the workspace! You now share the same data.');
+        toast('success', `You joined "${result.workspaceName}"! Shared expenses are now visible.`);
+        setActiveView('dashboard');
       }
     })();
-  }, [pendingInviteToken, userId, workspaceLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingJoinId, userId, workspaceLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Show auth modal when invite link is opened by unauthenticated user ────
+  // ── If not signed in when a join link is opened → show auth modal ─────────
   useEffect(() => {
-    if (pendingInviteToken && !userId && !authLoading) {
+    if (pendingJoinId && !userId && !authLoading) {
       setIsAuthOpen(true);
     }
-  }, [pendingInviteToken, userId, authLoading]);
+  }, [pendingJoinId, userId, authLoading]);
 
   // ── Navigate to home + toast when user signs in ───────────────────────────
   useEffect(() => {
@@ -204,7 +210,7 @@ export default function App() {
     setIsGuestMode(false);
     setIsAuthOpen(false);
     setActiveView('home');
-    if (!pendingInviteToken) {
+    if (!pendingJoinId) {
       toast('success', 'Signed in — your data is now synced.');
     }
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -516,7 +522,7 @@ export default function App() {
           workspace={activeWorkspace}
           members={members}
           currentUserId={userId!}
-          onInvite={inviteUser}
+          joinUrl={getJoinUrl()}
         />
       )}
 

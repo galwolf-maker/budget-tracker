@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Mail, Copy, Check, Users, Crown, UserPlus, User, Lock } from 'lucide-react';
+import { X, Copy, Check, Users, Crown, User, Lock, Link } from 'lucide-react';
 import type { HouseholdMember, Workspace } from '../../types';
 
 interface WorkspaceModalProps {
@@ -8,7 +8,8 @@ interface WorkspaceModalProps {
   workspace: Workspace;
   members: HouseholdMember[];
   currentUserId: string;
-  onInvite: (email: string) => Promise<{ link: string } | { error: string }>;
+  /** Pre-built join URL — null for personal workspaces */
+  joinUrl: string | null;
 }
 
 export function WorkspaceModal({
@@ -17,37 +18,19 @@ export function WorkspaceModal({
   workspace,
   members,
   currentUserId,
-  onInvite,
+  joinUrl,
 }: WorkspaceModalProps) {
-  const [email, setEmail] = useState('');
-  const [inviteLink, setInviteLink] = useState('');
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const isPersonal = workspace.type === 'personal';
 
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.includes('@')) { setError('Enter a valid email address.'); return; }
-    setLoading(true);
-    setError(null);
-    const result = await onInvite(email);
-    setLoading(false);
-    if ('error' in result) {
-      setError(result.error);
-    } else {
-      setInviteLink(result.link);
-      setEmail('');
-    }
-  };
-
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(inviteLink);
+    if (!joinUrl) return;
+    await navigator.clipboard.writeText(joinUrl);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   return (
@@ -81,7 +64,8 @@ export function WorkspaceModal({
         </div>
 
         <div className="p-6 space-y-5">
-          {isPersonal ? (
+          {/* Personal workspace notice */}
+          {isPersonal && (
             <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40">
               <Lock size={16} className="text-blue-500 mt-0.5 shrink-0" />
               <p className="text-sm text-blue-700 dark:text-blue-300">
@@ -89,103 +73,77 @@ export function WorkspaceModal({
                 Create a shared workspace to collaborate with others.
               </p>
             </div>
-          ) : null}
+          )}
 
           {/* Members list */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
               Members
+              <span className="ml-1.5 font-normal normal-case text-slate-400">
+                ({members.length})
+              </span>
             </p>
-            <ul className="space-y-2">
-              {members.map((m) => (
-                <li key={m.userId} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                    {(m.fullName ?? m.email).charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {m.fullName && (
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{m.fullName}</p>
-                    )}
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.email}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {m.userId === currentUserId && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
-                        you
-                      </span>
-                    )}
-                    {m.role === 'owner' && (
-                      <span title="Owner"><Crown size={13} className="text-amber-400" /></span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {members.length === 0 ? (
+              <p className="text-sm text-slate-400 dark:text-slate-500 italic">No members loaded yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {members.map((m) => (
+                  <li key={m.userId} className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                      {(m.fullName ?? m.email).charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {m.fullName && (
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+                          {m.fullName}
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.email}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {m.userId === currentUserId && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                          you
+                        </span>
+                      )}
+                      {m.role === 'owner' && (
+                        <span title="Owner">
+                          <Crown size={13} className="text-amber-400" />
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
-          {/* Invite form — only for shared workspaces */}
-          {!isPersonal && (
+          {/* Invite section — shared workspaces only */}
+          {!isPersonal && joinUrl && (
             <>
               <hr className="border-slate-100 dark:border-slate-700" />
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-                  Invite a member
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+                  Invite members
                 </p>
-
-                {inviteLink ? (
-                  <div className="space-y-3">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Share this link. It expires in 7 days.
-                    </p>
-                    <div className="flex gap-2">
-                      <input
-                        readOnly
-                        value={inviteLink}
-                        className="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 font-mono min-w-0"
-                      />
-                      <button
-                        onClick={handleCopy}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shrink-0"
-                      >
-                        {copied ? <Check size={13} /> : <Copy size={13} />}
-                        {copied ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => setInviteLink('')}
-                      className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                    >
-                      Invite another person
-                    </button>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                  Share this link. Anyone who opens it will join this workspace.
+                </p>
+                <div className="flex gap-2">
+                  <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 min-w-0">
+                    <Link size={13} className="text-slate-400 shrink-0" />
+                    <span className="text-xs text-slate-600 dark:text-slate-300 font-mono truncate">
+                      {joinUrl}
+                    </span>
                   </div>
-                ) : (
-                  <form onSubmit={handleInvite} className="space-y-3">
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="partner@email.com"
-                          className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 shrink-0"
-                      >
-                        <UserPlus size={14} />
-                        {loading ? '…' : 'Invite'}
-                      </button>
-                    </div>
-                    {error && <p className="text-xs text-rose-500">{error}</p>}
-                    <p className="text-xs text-slate-400 dark:text-slate-500">
-                      We'll generate a one-time invite link for you to share.
-                    </p>
-                  </form>
-                )}
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 active:scale-95 transition-all shrink-0"
+                  >
+                    {copied ? <Check size={13} /> : <Copy size={13} />}
+                    {copied ? 'Copied!' : 'Copy link'}
+                  </button>
+                </div>
               </div>
             </>
           )}

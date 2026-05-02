@@ -9,8 +9,10 @@ export interface UseWorkspaceReturn {
   members: HouseholdMember[];
   workspaceLoading: boolean;
   setActiveWorkspaceId: (id: string) => void;
-  inviteUser: (email: string) => Promise<{ link: string } | { error: string }>;
-  acceptInvite: (token: string) => Promise<string | null>;
+  /** Returns the join URL for the active shared workspace */
+  getJoinUrl: () => string | null;
+  /** Join a shared workspace by its ID. Returns error string or null on success. */
+  joinWorkspace: (workspaceId: string) => Promise<{ workspaceName: string } | { error: string }>;
   createSharedWorkspace: (name: string) => Promise<string | null>;
 }
 
@@ -56,6 +58,7 @@ export function useWorkspace(
         joinedAt: r.joined_at,
       }))
     );
+    console.log('[BT:workspace] Members loaded:', memberRows.length);
   }, []);
 
   const persistActive = useCallback(
@@ -78,7 +81,6 @@ export function useWorkspace(
 
     (async () => {
       try {
-        // Upsert profile
         if (userEmail) {
           const { error: profileErr } = await supabase
             .from('profiles')
@@ -86,16 +88,12 @@ export function useWorkspace(
           if (profileErr) console.warn('[BT:workspace] Profile upsert error:', profileErr);
         }
 
-        // Fetch all workspaces the user belongs to (via household_members)
         const { data: memberRows, error: memberErr } = await supabase
           .from('household_members')
           .select('household_id, households(id, name, type, created_by)')
           .eq('user_id', userId);
 
-        if (memberErr) {
-          console.error('[BT:workspace] Failed to fetch member rows:', memberErr);
-        }
-
+        if (memberErr) console.error('[BT:workspace] Failed to fetch member rows:', memberErr);
         console.log('[BT:workspace] Raw member rows:', memberRows);
 
         type HouseholdJoin = {
@@ -104,7 +102,6 @@ export function useWorkspace(
           type: string | null;
           created_by: string;
         };
-
         type MemberRow = {
           household_id: string;
           households: HouseholdJoin | HouseholdJoin[] | null;
@@ -112,7 +109,6 @@ export function useWorkspace(
 
         const fetched: Workspace[] = ((memberRows ?? []) as MemberRow[])
           .map((r) => {
-            // PostgREST may return the joined row as an object or a single-element array
             const hhRaw = r.households;
             const hh: HouseholdJoin | null = Array.isArray(hhRaw)
               ? (hhRaw[0] ?? null)
@@ -129,19 +125,14 @@ export function useWorkspace(
           })
           .filter(Boolean) as Workspace[];
 
-        // ── Ensure personal workspace exists ─────────────────────────────────
+        // ── Ensure personal workspace exists ──────────────────────────────────
         let personalWs = fetched.find((w) => w.type === 'personal');
         console.log('[BT:workspace] Personal workspace found?', !!personalWs);
 
         if (!personalWs) {
           const personalName = userEmail ? `${userEmail}'s workspace` : 'Personal';
           console.log('[BT:workspace] Creating personal workspace:', personalName);
-
-          // Generate UUID client-side to avoid the RLS chicken-and-egg:
-          // INSERT...SELECT fails because SELECT RLS checks household_members
-          // membership which doesn't exist yet at INSERT time.
           const wsId = crypto.randomUUID();
-          console.log('[BT:workspace] Generated workspace id:', wsId);
 
           const { error: hhErr } = await supabase
             .from('households')
@@ -149,10 +140,8 @@ export function useWorkspace(
 
           if (hhErr) {
             console.error('[BT:workspace] INSERT households failed:', hhErr);
-            console.error('[BT:workspace] Hint: if error says "column type does not exist", go to');
-            console.error('[BT:workspace] Supabase Dashboard → Settings → API → Reload schema cache');
+            console.error('[BT:workspace] Hint: if "column type does not exist", reload schema cache in Supabase → Settings → API');
           } else {
-            console.log('[BT:workspace] Household inserted, adding membership...');
             const { error: memberInsertErr } = await supabase
               .from('household_members')
               .insert({ household_id: wsId, user_id: userId, role: 'owner' });
@@ -160,9 +149,6 @@ export function useWorkspace(
             if (memberInsertErr) {
               console.error('[BT:workspace] INSERT household_members failed:', memberInsertErr);
             } else {
-              console.log('[BT:workspace] Membership inserted. Backfilling orphaned data...');
-
-              // Backfill any transactions/categories not yet assigned to a workspace
               const [txRes, catRes] = await Promise.all([
                 supabase
                   .from('transactions')
@@ -180,12 +166,12 @@ export function useWorkspace(
 
               personalWs = { id: wsId, name: personalName, type: 'personal', memberCount: 1 };
               fetched.unshift(personalWs);
-              console.log('[BT:workspace] Personal workspace created successfully:', wsId);
+              console.log('[BT:workspace] Personal workspace created:', wsId);
             }
           }
         }
 
-        // ── Get member counts for shared workspaces ───────────────────────────
+        // ── Member counts for shared workspaces ───────────────────────────────
         const sharedIds = fetched.filter((w) => w.type === 'shared').map((w) => w.id);
         if (sharedIds.length > 0) {
           const { data: countRows } = await supabase
@@ -201,7 +187,7 @@ export function useWorkspace(
           });
         }
 
-        // ── Sort: personal first, then shared alphabetically ─────────────────
+        // Personal first, then shared alphabetically
         fetched.sort((a, b) => {
           if (a.type === 'personal') return -1;
           if (b.type === 'personal') return 1;
@@ -211,11 +197,10 @@ export function useWorkspace(
         console.log('[BT:workspace] Final workspace list:', fetched.map((w) => `${w.name} (${w.type})`));
         setWorkspaces(fetched);
 
-        // ── Resolve active workspace ──────────────────────────────────────────
         const savedId = localStorage.getItem(lsKey(userId));
         const validSaved = savedId && fetched.some((w) => w.id === savedId);
         const targetId = validSaved ? savedId : (personalWs?.id ?? fetched[0]?.id ?? null);
-        console.log('[BT:workspace] Active workspace resolved →', targetId, validSaved ? '(from localStorage)' : '(default)');
+        console.log('[BT:workspace] Active workspace →', targetId, validSaved ? '(saved)' : '(default)');
 
         if (targetId) {
           _setActiveWorkspaceId(targetId);
@@ -230,7 +215,6 @@ export function useWorkspace(
     })();
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reload members when user switches workspace (after initial load)
   useEffect(() => {
     if (activeWorkspaceId && workspaces.length > 0) {
       loadMembers(activeWorkspaceId);
@@ -242,56 +226,66 @@ export function useWorkspace(
     [persistActive]
   );
 
-  const inviteUser = useCallback(
-    async (email: string): Promise<{ link: string } | { error: string }> => {
-      if (!supabase || !activeWorkspaceId || !userId) return { error: 'Not ready' };
+  // ── getJoinUrl ─────────────────────────────────────────────────────────────
+  // Returns a shareable join link for the currently active shared workspace.
+  const getJoinUrl = useCallback((): string | null => {
+    if (!activeWorkspaceId || activeWorkspace?.type !== 'shared') return null;
+    return `${window.location.origin}/?join=${activeWorkspaceId}`;
+  }, [activeWorkspaceId, activeWorkspace]);
 
-      await supabase
-        .from('invitations')
-        .update({ status: 'expired' })
-        .eq('household_id', activeWorkspaceId)
-        .eq('invited_email', email)
-        .eq('status', 'pending');
+  // ── joinWorkspace ──────────────────────────────────────────────────────────
+  // Calls the join_shared_workspace RPC which is SECURITY DEFINER (bypasses
+  // RLS) — handles duplicate check and personal-workspace guard server-side.
+  const joinWorkspace = useCallback(
+    async (workspaceId: string): Promise<{ workspaceName: string } | { error: string }> => {
+      if (!supabase) return { error: 'Supabase not configured' };
 
-      const { data, error } = await supabase
-        .from('invitations')
-        .insert({ household_id: activeWorkspaceId, invited_email: email, invited_by: userId })
-        .select()
-        .single();
+      console.log('[BT:workspace] Joining workspace:', workspaceId);
 
-      if (error || !data) return { error: error?.message ?? 'Failed to create invitation' };
-      const link = `${window.location.origin}${window.location.pathname}?invite=${data.token}`;
-      return { link };
-    },
-    [activeWorkspaceId, userId]
-  );
-
-  const acceptInvite = useCallback(
-    async (token: string): Promise<string | null> => {
-      if (!supabase) return 'Supabase not configured';
-
-      const { data, error } = await supabase.rpc('accept_invitation', { p_token: token });
-      if (error) return error.message;
-      if (data?.error) return data.error as string;
-
-      const newId = data?.household_id as string;
-      console.log('[BT:workspace] Joined workspace:', newId);
-      setWorkspaces((prev) => {
-        if (prev.some((w) => w.id === newId)) return prev;
-        return [...prev, { id: newId, name: 'Shared workspace', type: 'shared', memberCount: 1 }];
+      const { data, error } = await supabase.rpc('join_shared_workspace', {
+        p_workspace_id: workspaceId,
       });
-      persistActive(newId);
-      await loadMembers(newId);
-      return null;
+
+      if (error) {
+        console.error('[BT:workspace] join_shared_workspace RPC error:', error);
+        return { error: error.message };
+      }
+
+      if (data?.error) {
+        console.error('[BT:workspace] join_shared_workspace returned error:', data.error);
+        return { error: data.error as string };
+      }
+
+      const wsName = (data?.workspace_name as string) ?? 'Workspace';
+      const alreadyMember = data?.already_member as boolean;
+      const wsId = (data?.workspace_id as string) ?? workspaceId;
+
+      console.log(
+        '[BT:workspace] Join result — workspace:', wsName,
+        '| already_member:', alreadyMember,
+        '| id:', wsId
+      );
+
+      // Add to workspaces list if not already there
+      setWorkspaces((prev) => {
+        if (prev.some((w) => w.id === wsId)) return prev;
+        return [...prev, { id: wsId, name: wsName, type: 'shared', memberCount: 1 }];
+      });
+
+      // Make it the active workspace
+      persistActive(wsId);
+      await loadMembers(wsId);
+
+      return { workspaceName: wsName };
     },
     [persistActive, loadMembers]
   );
 
+  // ── createSharedWorkspace ──────────────────────────────────────────────────
   const createSharedWorkspace = useCallback(
     async (name: string): Promise<string | null> => {
       if (!supabase || !userId) return 'Not ready';
 
-      // Use crypto.randomUUID() for the same reason as personal workspace creation
       const wsId = crypto.randomUUID();
       console.log('[BT:workspace] Creating shared workspace:', name, '| id:', wsId);
 
@@ -309,7 +303,7 @@ export function useWorkspace(
         .insert({ household_id: wsId, user_id: userId, role: 'owner' });
 
       if (memberErr) {
-        console.error('[BT:workspace] Failed to add owner to shared workspace:', memberErr);
+        console.error('[BT:workspace] Failed to add owner:', memberErr);
         return memberErr.message;
       }
 
@@ -330,8 +324,8 @@ export function useWorkspace(
     members,
     workspaceLoading,
     setActiveWorkspaceId,
-    inviteUser,
-    acceptInvite,
+    getJoinUrl,
+    joinWorkspace,
     createSharedWorkspace,
   };
 }
