@@ -34,6 +34,8 @@ export interface Category {
   name: string;
   type: TransactionType;
   isCustom: boolean;
+  /** True for global defaults seeded by the platform (household_id = NULL in DB) */
+  isDefault?: boolean;
 }
 
 export interface TransactionFilters {

@@ -40,11 +40,12 @@ export interface TxnRow {
 
 export interface CatRow {
   id: string;
-  user_id: string;
+  user_id: string | null; // NULL for global defaults
   household_id: string | null;
   name: string;
   type: string;
   is_custom: boolean;
+  is_default: boolean;
 }
 
 export interface HouseholdRow {
@@ -112,10 +113,11 @@ export function txnToRow(
 
 export function rowToCat(r: CatRow): Category {
   return {
-    id:       r.id,
-    name:     r.name,
-    type:     r.type as Category['type'],
-    isCustom: r.is_custom,
+    id:        r.id,
+    name:      r.name,
+    type:      r.type as Category['type'],
+    isCustom:  r.is_custom,
+    isDefault: r.is_default ?? false,
   };
 }
 

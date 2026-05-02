@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Globe } from 'lucide-react';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import type { Category, TransactionType } from '../types';
 
@@ -162,9 +162,18 @@ function CategorySection({
               <span className="text-sm text-slate-700 dark:text-slate-200 font-medium">
                 {cat.name}
               </span>
-              {!cat.isCustom && (
-                <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full font-medium">
+              {cat.isDefault && (
+                <span
+                  title="Global default — available in all workspaces"
+                  className="inline-flex items-center gap-1 text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full font-medium"
+                >
+                  <Globe size={9} />
                   default
+                </span>
+              )}
+              {!cat.isDefault && !cat.isCustom && (
+                <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full font-medium">
+                  built-in
                 </span>
               )}
             </div>

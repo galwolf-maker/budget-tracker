@@ -1,17 +1,18 @@
 import type { Category } from '../types';
 
 export const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'food', name: 'Food', type: 'expense', isCustom: false },
-  { id: 'rent', name: 'Rent', type: 'expense', isCustom: false },
-  { id: 'transport', name: 'Transport', type: 'expense', isCustom: false },
-  { id: 'entertainment', name: 'Entertainment', type: 'expense', isCustom: false },
-  { id: 'shopping', name: 'Shopping', type: 'expense', isCustom: false },
-  { id: 'health', name: 'Health', type: 'expense', isCustom: false },
-  { id: 'other-expense', name: 'Other', type: 'expense', isCustom: false },
-  { id: 'salary', name: 'Salary', type: 'income', isCustom: false },
-  { id: 'freelance', name: 'Freelance', type: 'income', isCustom: false },
-  { id: 'gifts', name: 'Gifts', type: 'income', isCustom: false },
-  { id: 'other-income', name: 'Other', type: 'income', isCustom: false },
+  { id: 'default-food',          name: 'Food',          type: 'expense', isCustom: false, isDefault: true },
+  { id: 'default-rent',          name: 'Rent',          type: 'expense', isCustom: false, isDefault: true },
+  { id: 'default-transport',     name: 'Transport',     type: 'expense', isCustom: false, isDefault: true },
+  { id: 'default-entertainment', name: 'Entertainment', type: 'expense', isCustom: false, isDefault: true },
+  { id: 'default-shopping',      name: 'Shopping',      type: 'expense', isCustom: false, isDefault: true },
+  { id: 'default-health',        name: 'Health',        type: 'expense', isCustom: false, isDefault: true },
+  { id: 'default-utilities',     name: 'Utilities',     type: 'expense', isCustom: false, isDefault: true },
+  { id: 'default-other-expense', name: 'Other',         type: 'expense', isCustom: false, isDefault: true },
+  { id: 'default-salary',        name: 'Salary',        type: 'income',  isCustom: false, isDefault: true },
+  { id: 'default-freelance',     name: 'Freelance',     type: 'income',  isCustom: false, isDefault: true },
+  { id: 'default-gifts',         name: 'Gifts',         type: 'income',  isCustom: false, isDefault: true },
+  { id: 'default-other-income',  name: 'Other',         type: 'income',  isCustom: false, isDefault: true },
 ];
 
 // Named colors for known categories — extras fall back to CHART_PALETTE
