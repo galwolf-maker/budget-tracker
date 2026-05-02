@@ -134,6 +134,7 @@ export default function App() {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    deleteTransactions,
     importTransactions,
     markRecurring,
     recurringAutoAdded,
@@ -272,6 +273,19 @@ export default function App() {
   const handleDelete = useCallback(
     (id: string) => { deleteTransaction(id); toast('success', 'Transaction deleted.'); },
     [deleteTransaction, toast]
+  );
+
+  const handleBulkDelete = useCallback(
+    async (ids: string[]): Promise<string | null> => {
+      const error = await deleteTransactions(ids);
+      if (error) {
+        toast('error', `Could not delete transactions: ${error}`);
+      } else {
+        toast('success', `${ids.length} transaction${ids.length !== 1 ? 's' : ''} deleted.`);
+      }
+      return error;
+    },
+    [deleteTransactions, toast]
   );
 
   // ── Smart detection ────────────────────────────────────────────────────
@@ -469,6 +483,7 @@ export default function App() {
               onAdd={openAdd}
               onEdit={openEdit}
               onDelete={handleDelete}
+              onBulkDelete={handleBulkDelete}
               onMarkRecurring={markRecurring}
               currentUserId={userId}
               members={members}

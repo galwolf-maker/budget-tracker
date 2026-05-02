@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Plus } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { TransactionFilters } from '../components/transactions/TransactionFilters';
 import { TransactionItem } from '../components/transactions/TransactionItem';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -17,6 +17,7 @@ interface TransactionsViewProps {
   onAdd: () => void;
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
+  onBulkDelete: (ids: string[]) => Promise<string | null>;
   onMarkRecurring: (id: string, flag: boolean) => void;
   currentUserId?: string | null;
   members?: HouseholdMember[];
@@ -36,12 +37,18 @@ export function Transactions({
   onAdd,
   onEdit,
   onDelete,
+  onBulkDelete,
   onMarkRecurring,
   currentUserId,
   members,
 }: TransactionsViewProps) {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  // ── Selection state ────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const filtered = useMemo(
     () => getFilteredTransactions(filters),
@@ -55,10 +62,74 @@ export function Transactions({
 
   const isFiltered = filtered.length !== transactions.length;
 
+  // Clear selection whenever filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filters]);
+
+  // ── Selection helpers ──────────────────────────────────────────────────────
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  const filteredIds = useMemo(() => filtered.map((t) => t.id), [filtered]);
+
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const someFilteredSelected = filteredIds.some((id) => selectedIds.has(id));
+
+  const toggleSelectAll = useCallback(() => {
+    if (allFilteredSelected) {
+      // Deselect all filtered
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      // Select all filtered
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  }, [allFilteredSelected, filteredIds]);
+
+  // How many of the currently-selected IDs are visible in this filtered view
+  const visibleSelectedCount = filteredIds.filter((id) => selectedIds.has(id)).length;
+  // Total selected (may include items outside the current filter)
+  const totalSelected = selectedIds.size;
+
+  // ── Single-delete ──────────────────────────────────────────────────────────
   const handleConfirmDelete = () => {
     if (pendingDeleteId) {
       onDelete(pendingDeleteId);
+      // Also remove from selection if it was selected
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(pendingDeleteId);
+        return next;
+      });
       setPendingDeleteId(null);
+    }
+  };
+
+  // ── Bulk delete ────────────────────────────────────────────────────────────
+  const handleConfirmBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    const error = await onBulkDelete(ids);
+    setIsBulkDeleting(false);
+    setConfirmBulkDelete(false);
+    setSelectedIds(new Set());
+    if (error) {
+      // Surface the error via toast in the parent; nothing more to do here
+      console.error('[BT] Bulk delete error:', error);
     }
   };
 
@@ -72,9 +143,23 @@ export function Transactions({
       />
 
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-        {/* List header */}
+        {/* ── List header ── */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* Select-all checkbox */}
+            {filtered.length > 0 && (
+              <input
+                type="checkbox"
+                checked={allFilteredSelected}
+                ref={(el) => {
+                  // Indeterminate state: some but not all are selected
+                  if (el) el.indeterminate = someFilteredSelected && !allFilteredSelected;
+                }}
+                onChange={toggleSelectAll}
+                aria-label="Select all transactions"
+                className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 accent-blue-600 cursor-pointer shrink-0"
+              />
+            )}
             <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {filtered.length}{' '}
               {filtered.length === 1 ? 'transaction' : 'transactions'}
@@ -94,7 +179,33 @@ export function Transactions({
           </button>
         </div>
 
-        {/* Empty state */}
+        {/* ── Bulk action toolbar — visible when anything is selected ── */}
+        {totalSelected > 0 && (
+          <div className="flex items-center justify-between px-4 sm:px-6 py-2.5 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800/40">
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+              {visibleSelectedCount > 0 && visibleSelectedCount !== totalSelected
+                ? `${totalSelected} selected (${visibleSelectedCount} visible)`
+                : `${totalSelected} selected`}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setConfirmBulkDelete(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 rounded-lg transition-colors"
+              >
+                <Trash2 size={12} />
+                Delete {totalSelected}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Empty state ── */}
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
             <div className="text-4xl mb-3">
@@ -131,12 +242,15 @@ export function Transactions({
                 onMarkRecurring={onMarkRecurring}
                 currentUserId={currentUserId}
                 members={members}
+                selected={selectedIds.has(t.id)}
+                onToggleSelect={toggleSelect}
               />
             ))}
           </div>
         )}
       </div>
 
+      {/* Single-delete confirmation */}
       <ConfirmDialog
         isOpen={pendingDeleteId !== null}
         onClose={() => setPendingDeleteId(null)}
@@ -144,6 +258,17 @@ export function Transactions({
         title="Delete Transaction"
         message="This transaction will be permanently removed. This action cannot be undone."
         confirmLabel="Delete"
+      />
+
+      {/* Bulk-delete confirmation */}
+      <ConfirmDialog
+        isOpen={confirmBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={handleConfirmBulkDelete}
+        title="Delete Transactions"
+        message={`Are you sure you want to delete ${totalSelected} ${totalSelected === 1 ? 'transaction' : 'transactions'}? This cannot be undone.`}
+        confirmLabel={`Delete ${totalSelected}`}
+        confirmLoading={isBulkDeleting}
       />
     </div>
   );

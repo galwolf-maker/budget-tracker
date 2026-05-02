@@ -12,6 +12,8 @@ interface TransactionItemProps {
   readOnly?: boolean;
   currentUserId?: string | null;
   members?: HouseholdMember[];
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
 function getCategoryColor(name: string): string {
@@ -26,12 +28,13 @@ export function TransactionItem({
   readOnly = false,
   currentUserId,
   members = [],
+  selected = false,
+  onToggleSelect,
 }: TransactionItemProps) {
   const { currency } = useCurrencyContext();
   const color = getCategoryColor(t.category);
   const isIncome = t.type === 'income';
 
-  // Show "added by" badge when there are household members and it's not the current user
   const addedByMember =
     t.createdBy && t.createdBy !== currentUserId
       ? members.find((m) => m.userId === t.createdBy)
@@ -41,7 +44,25 @@ export function TransactionItem({
     : null;
 
   return (
-    <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 hover:bg-slate-50/80 dark:hover:bg-slate-700/40 transition-colors group">
+    <div
+      className={`flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 transition-colors group ${
+        selected
+          ? 'bg-blue-50/60 dark:bg-blue-900/20'
+          : 'hover:bg-slate-50/80 dark:hover:bg-slate-700/40'
+      }`}
+    >
+      {/* Checkbox — shown when selection is enabled */}
+      {onToggleSelect !== undefined && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(t.id)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Select transaction ${t.description || t.category}`}
+          className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 accent-blue-600 cursor-pointer shrink-0 transition-opacity"
+        />
+      )}
+
       {/* Avatar */}
       <div
         className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 select-none"

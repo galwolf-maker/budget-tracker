@@ -213,6 +213,30 @@ export function useTransactions(userId: string | null, householdId: string | nul
     [userId, householdId, setTransactions]
   );
 
+  const deleteTransactions = useCallback(
+    async (ids: string[]): Promise<string | null> => {
+      if (ids.length === 0) return null;
+      // Optimistic remove immediately
+      setTransactions((prev) => prev.filter((t) => !ids.includes(t.id)));
+      if (userId && supabase && householdId) {
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .in('id', ids)
+          .eq('household_id', householdId); // RLS still enforced
+        if (error) {
+          console.error('[BT] Supabase bulk delete failed:', error);
+          return error.message;
+        }
+        console.log('[BT] Bulk deleted', ids.length, 'transactions ✓');
+      } else {
+        console.warn('[BT] Bulk delete SKIPPED — userId:', userId, 'householdId:', householdId);
+      }
+      return null;
+    },
+    [userId, householdId, setTransactions]
+  );
+
   const importTransactions = useCallback(
     async (rows: Omit<Transaction, 'id' | 'createdAt'>[]) => {
       const newTxs: Transaction[] = rows.map((row) => ({
@@ -385,6 +409,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    deleteTransactions,
     importTransactions,
     markRecurring,
     recurringAutoAdded,
