@@ -135,6 +135,8 @@ export default function App() {
     updateTransaction,
     deleteTransaction,
     deleteTransactions,
+    copyTransactions,
+    moveTransactions,
     importTransactions,
     markRecurring,
     recurringAutoAdded,
@@ -286,6 +288,34 @@ export default function App() {
       return error;
     },
     [deleteTransactions, toast]
+  );
+
+  const handleCopyTransactions = useCallback(
+    async (ids: string[], targetId: string): Promise<string | null> => {
+      const targetName = workspaces.find((w) => w.id === targetId)?.name ?? 'workspace';
+      const error = await copyTransactions(ids, targetId);
+      if (error) {
+        toast('error', `Could not copy transactions: ${error}`);
+      } else {
+        toast('success', `${ids.length} transaction${ids.length !== 1 ? 's' : ''} copied to "${targetName}".`);
+      }
+      return error;
+    },
+    [copyTransactions, workspaces, toast]
+  );
+
+  const handleMoveTransactions = useCallback(
+    async (ids: string[], targetId: string): Promise<string | null> => {
+      const targetName = workspaces.find((w) => w.id === targetId)?.name ?? 'workspace';
+      const error = await moveTransactions(ids, targetId);
+      if (error) {
+        toast('error', `Could not move transactions: ${error}`);
+      } else {
+        toast('success', `${ids.length} transaction${ids.length !== 1 ? 's' : ''} moved to "${targetName}".`);
+      }
+      return error;
+    },
+    [moveTransactions, workspaces, toast]
   );
 
   // ── Smart detection ────────────────────────────────────────────────────
@@ -487,6 +517,10 @@ export default function App() {
               onMarkRecurring={markRecurring}
               currentUserId={userId}
               members={members}
+              workspaces={user ? workspaces : []}
+              currentWorkspaceId={activeWorkspaceId}
+              onCopyTransactions={user ? handleCopyTransactions : undefined}
+              onMoveTransactions={user ? handleMoveTransactions : undefined}
             />
           )}
           {activeView === 'categories' && (

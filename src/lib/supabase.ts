@@ -40,7 +40,7 @@ export interface TxnRow {
 
 export interface CatRow {
   id: string;
-  user_id: string | null; // NULL for global defaults
+  user_id: string;          // NON-NULLABLE in DB; we always provide the real userId
   household_id: string | null;
   name: string;
   type: string;
@@ -133,5 +133,6 @@ export function catToRow(
     name:         c.name,
     type:         c.type,
     is_custom:    c.isCustom,
+    is_default:   c.isDefault ?? false,
   };
 }

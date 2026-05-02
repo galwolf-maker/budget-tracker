@@ -1,13 +1,15 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Copy, ArrowRight } from 'lucide-react';
 import { TransactionFilters } from '../components/transactions/TransactionFilters';
 import { TransactionItem } from '../components/transactions/TransactionItem';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { CopyMoveModal } from '../components/workspace/CopyMoveModal';
 import type {
   Transaction,
   TransactionFilters as Filters,
   Category,
   HouseholdMember,
+  Workspace,
 } from '../types';
 
 interface TransactionsViewProps {
@@ -21,6 +23,10 @@ interface TransactionsViewProps {
   onMarkRecurring: (id: string, flag: boolean) => void;
   currentUserId?: string | null;
   members?: HouseholdMember[];
+  workspaces?: Workspace[];
+  currentWorkspaceId?: string | null;
+  onCopyTransactions?: (ids: string[], targetId: string) => Promise<string | null>;
+  onMoveTransactions?: (ids: string[], targetId: string) => Promise<string | null>;
 }
 
 const DEFAULT_FILTERS: Filters = {
@@ -41,6 +47,10 @@ export function Transactions({
   onMarkRecurring,
   currentUserId,
   members,
+  workspaces,
+  currentWorkspaceId,
+  onCopyTransactions,
+  onMoveTransactions,
 }: TransactionsViewProps) {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -49,6 +59,7 @@ export function Transactions({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [copyMoveMode, setCopyMoveMode] = useState<'copy' | 'move' | null>(null);
 
   const filtered = useMemo(
     () => getFilteredTransactions(filters),
@@ -187,13 +198,32 @@ export function Transactions({
                 ? `${totalSelected} selected (${visibleSelectedCount} visible)`
                 : `${totalSelected} selected`}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setSelectedIds(new Set())}
                 className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
               >
                 Clear
               </button>
+              {/* Copy / Move — only when the user has multiple workspaces */}
+              {workspaces && workspaces.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setCopyMoveMode('copy')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                  >
+                    <Copy size={12} />
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => setCopyMoveMode('move')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+                  >
+                    <ArrowRight size={12} />
+                    Move
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setConfirmBulkDelete(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 rounded-lg transition-colors"
@@ -269,6 +299,32 @@ export function Transactions({
         message={`Are you sure you want to delete ${totalSelected} ${totalSelected === 1 ? 'transaction' : 'transactions'}? This cannot be undone.`}
         confirmLabel={`Delete ${totalSelected}`}
         confirmLoading={isBulkDeleting}
+      />
+
+      {/* Copy / Move modal */}
+      <CopyMoveModal
+        isOpen={copyMoveMode !== null}
+        onClose={() => setCopyMoveMode(null)}
+        mode={copyMoveMode ?? 'copy'}
+        count={totalSelected}
+        workspaces={workspaces ?? []}
+        currentWorkspaceId={currentWorkspaceId ?? null}
+        onConfirm={async (targetId) => {
+          const ids = Array.from(selectedIds);
+          if (copyMoveMode === 'copy') {
+            const error = await onCopyTransactions?.(ids, targetId) ?? null;
+            if (!error) {
+              setCopyMoveMode(null);
+              // Keep selection so the user can do a follow-up action
+            }
+          } else {
+            const error = await onMoveTransactions?.(ids, targetId) ?? null;
+            if (!error) {
+              setCopyMoveMode(null);
+              setSelectedIds(new Set()); // moved away — nothing left to select
+            }
+          }
+        }}
       />
     </div>
   );

@@ -237,6 +237,77 @@ export function useTransactions(userId: string | null, householdId: string | nul
     [userId, householdId, setTransactions]
   );
 
+  const copyTransactions = useCallback(
+    async (ids: string[], targetHouseholdId: string): Promise<string | null> => {
+      if (ids.length === 0 || !userId || !supabase) return null;
+
+      const source = txnsRef.current.filter((t) => ids.includes(t.id));
+      if (source.length === 0) return null;
+
+      const copies = source.map((t) =>
+        txnToRow(
+          userId,
+          { ...t, id: generateId(), createdAt: new Date().toISOString(), createdBy: userId },
+          targetHouseholdId
+        )
+      );
+
+      const { error } = await supabase.from('transactions').insert(copies);
+      if (error) {
+        console.error('[BT] Copy transactions failed:', error);
+        return error.message;
+      }
+      console.log('[BT] Copied', ids.length, 'transactions ✓');
+      return null;
+    },
+    [userId]
+  );
+
+  const moveTransactions = useCallback(
+    async (ids: string[], targetHouseholdId: string): Promise<string | null> => {
+      if (ids.length === 0 || !userId || !supabase || !householdId) return null;
+
+      const source = txnsRef.current.filter((t) => ids.includes(t.id));
+      if (source.length === 0) return null;
+
+      // Optimistic: remove from current workspace immediately
+      setTransactions((prev) => prev.filter((t) => !ids.includes(t.id)));
+
+      // Insert into target workspace
+      const copies = source.map((t) =>
+        txnToRow(
+          userId,
+          { ...t, id: generateId(), createdAt: new Date().toISOString(), createdBy: userId },
+          targetHouseholdId
+        )
+      );
+
+      const { error: insertError } = await supabase.from('transactions').insert(copies);
+      if (insertError) {
+        console.error('[BT] Move transactions insert failed:', insertError);
+        // Roll back optimistic removal
+        setTransactions((prev) => [...source, ...prev]);
+        return insertError.message;
+      }
+
+      // Delete originals from source workspace
+      const { error: deleteError } = await supabase
+        .from('transactions')
+        .delete()
+        .in('id', ids)
+        .eq('household_id', householdId);
+
+      if (deleteError) {
+        console.error('[BT] Move transactions delete from source failed:', deleteError);
+        return deleteError.message;
+      }
+
+      console.log('[BT] Moved', ids.length, 'transactions ✓');
+      return null;
+    },
+    [userId, householdId, setTransactions]
+  );
+
   const importTransactions = useCallback(
     async (rows: Omit<Transaction, 'id' | 'createdAt'>[]) => {
       const newTxs: Transaction[] = rows.map((row) => ({
@@ -410,6 +481,8 @@ export function useTransactions(userId: string | null, householdId: string | nul
     updateTransaction,
     deleteTransaction,
     deleteTransactions,
+    copyTransactions,
+    moveTransactions,
     importTransactions,
     markRecurring,
     recurringAutoAdded,
