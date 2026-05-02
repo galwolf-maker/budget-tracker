@@ -176,14 +176,63 @@ export function useWorkspace(
         );
 
         // ── Ensure personal workspace exists ──────────────────────────────────
-        // Guard: only create if NONE exist — avoids re-creating on transient errors.
+        // First check in-memory fetched list (fast path).
         let personalWs = fetched.find((w) => w.type === 'personal');
-        console.log('[BT:workspace] Personal workspace found?', !!personalWs,
+        console.log('[BT:workspace] Personal workspace in fetched list?', !!personalWs,
           personalWs ? `(id: ${personalWs.id})` : '');
 
+        // If not found in fetched, query the DB directly before creating.
+        // This is the critical guard: fetched may be empty because of a transient
+        // RLS/membership issue, not because the workspace genuinely doesn't exist.
+        // Checking households by (created_by, type) is the source of truth.
+        if (!personalWs) {
+          console.log('[BT:workspace] Not in fetched list — querying DB for existing personal workspace…');
+          const { data: existingPersonal, error: existErr } = await supabase
+            .from('households')
+            .select('id, name, type, created_by')
+            .eq('created_by', userId)
+            .eq('type', 'personal')
+            .limit(1)
+            .maybeSingle();
+
+          if (existErr) {
+            console.error('[BT:workspace] DB check for personal workspace failed — code:', existErr.code,
+              '| message:', existErr.message);
+          }
+
+          if (existingPersonal) {
+            // Workspace exists in DB but wasn't in fetched (membership row may be
+            // missing or RLS blocked it). Adopt it without creating a new one.
+            console.log('[BT:workspace] Found existing personal workspace in DB:', existingPersonal.id,
+              '— adopting without creating a duplicate');
+            personalWs = {
+              id:          existingPersonal.id,
+              name:        existingPersonal.name,
+              type:        'personal',
+              memberCount: 1,
+            };
+            // Ensure this user has a membership row (may have been missing).
+            const { error: adoptMemberErr } = await supabase
+              .from('household_members')
+              .upsert(
+                { household_id: existingPersonal.id, user_id: userId, role: 'owner', joined_at: new Date().toISOString() },
+                { onConflict: 'household_id,user_id' }
+              );
+            if (adoptMemberErr) {
+              console.warn('[BT:workspace] Could not upsert membership for adopted workspace:',
+                adoptMemberErr.message);
+            }
+            if (!fetched.some((w) => w.id === personalWs!.id)) {
+              fetched.unshift(personalWs);
+            }
+          }
+        }
+
+        // Only reach here if neither fetched list nor DB query found a personal
+        // workspace — safe to create exactly one.
         if (!personalWs) {
           const personalName = userEmail ? `${userEmail}'s workspace` : 'Personal';
-          console.log('[BT:workspace] Creating personal workspace:', personalName);
+          console.log('[BT:workspace] No personal workspace found anywhere — creating:', personalName);
           const wsId = crypto.randomUUID();
 
           const { error: hhErr } = await supabase
