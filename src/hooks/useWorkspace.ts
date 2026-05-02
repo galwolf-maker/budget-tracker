@@ -88,13 +88,33 @@ export function useWorkspace(
           if (profileErr) console.warn('[BT:workspace] Profile upsert error:', profileErr);
         }
 
+        // ── DIAGNOSTIC: log auth.uid() via a known-safe RPC ─────────────────
+        // This tells us whether auth.uid() matches userId, and whether RLS
+        // is evaluating with the correct identity.
+        const { data: uidData } = await supabase.rpc('get_my_uid').catch(() => ({ data: null }));
+        console.log('[BT:workspace] DIAG auth.uid() from DB:', uidData ?? '(RPC not available)');
+        console.log('[BT:workspace] DIAG userId from hook:  ', userId);
+        console.log('[BT:workspace] DIAG match:', uidData === userId);
+
         const { data: memberRows, error: memberErr } = await supabase
           .from('household_members')
           .select('household_id, households(id, name, type, created_by)')
           .eq('user_id', userId);
 
+        // ── DIAGNOSTIC: full raw result ───────────────────────────────────────
+        console.log('[BT:workspace] DIAG memberErr:', memberErr ?? 'none');
+        console.log('[BT:workspace] DIAG memberRows count:', memberRows?.length ?? 'null');
+        console.log('[BT:workspace] DIAG memberRows raw:', JSON.stringify(memberRows));
+        if (memberRows) {
+          memberRows.forEach((r: Record<string, unknown>, i: number) => {
+            console.log(
+              `[BT:workspace] DIAG row[${i}]: household_id=${r.household_id}`,
+              `| households=${r.households === null ? 'NULL (RLS blocked join)' : JSON.stringify(r.households)}`
+            );
+          });
+        }
+
         if (memberErr) console.error('[BT:workspace] Failed to fetch member rows:', memberErr);
-        console.log('[BT:workspace] Raw member rows:', memberRows);
 
         type HouseholdJoin = {
           id: string;
@@ -113,7 +133,11 @@ export function useWorkspace(
             const hh: HouseholdJoin | null = Array.isArray(hhRaw)
               ? (hhRaw[0] ?? null)
               : hhRaw;
-            if (!hh) return null;
+            if (!hh) {
+              console.warn('[BT:workspace] DIAG household join was null for household_id:', r.household_id,
+                '— likely RLS on households table blocking the embedded join');
+              return null;
+            }
             const ws: Workspace = {
               id:          hh.id,
               name:        hh.name,
