@@ -91,7 +91,13 @@ export function useWorkspace(
         // ── DIAGNOSTIC: log auth.uid() via a known-safe RPC ─────────────────
         // This tells us whether auth.uid() matches userId, and whether RLS
         // is evaluating with the correct identity.
-        const { data: uidData } = await supabase.rpc('get_my_uid').catch(() => ({ data: null }));
+        let uidData: string | null = null;
+        try {
+          const { data: uidResult, error: uidErr } = await supabase.rpc('get_my_uid');
+          if (!uidErr) uidData = uidResult as string | null;
+        } catch {
+          // RPC may not exist yet — ignore
+        }
         console.log('[BT:workspace] DIAG auth.uid() from DB:', uidData ?? '(RPC not available)');
         console.log('[BT:workspace] DIAG userId from hook:  ', userId);
         console.log('[BT:workspace] DIAG match:', uidData === userId);
