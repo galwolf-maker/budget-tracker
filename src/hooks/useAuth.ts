@@ -51,7 +51,16 @@ export function useAuth(): UseAuthReturn {
   };
 
   const signInWithGoogle = async () => {
-    await supabase!.auth.signInWithOAuth({ provider: 'google' });
+    // Always redirect to /auth/callback on the current origin so the PKCE
+    // code-exchange flow works in every environment (localhost + production).
+    // The Supabase dashboard "Site URL" is intentionally left blank / set to
+    // production; this explicit redirectTo overrides it every time.
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    console.log('[Auth] Google OAuth — redirectTo:', redirectTo);
+    await supabase!.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
   };
 
   const signOut = async () => {
