@@ -40,7 +40,7 @@ export function useWorkspace(
       .from('household_members')
       .select('user_id, role, joined_at')
       .eq('household_id', wsId);
-    if (error) { console.error('[BT:workspace] loadMembers error:', error); return; }
+    if (error) { console.error('[BT:workspace] loadMembers error — code:', error.code, '| message:', error.message, '| details:', error.details, '| hint:', error.hint); return; }
     if (!memberRows?.length) { setMembers([]); return; }
 
     const { data: profileRows } = await supabase
@@ -102,48 +102,45 @@ export function useWorkspace(
         console.log('[BT:workspace] DIAG userId from hook:  ', userId);
         console.log('[BT:workspace] DIAG match:', uidData === userId);
 
+        // ── Step 1: fetch household IDs this user belongs to ─────────────────
+        // Two plain queries instead of one embedded join — embedded joins require
+        // a registered FK in the PostgREST schema cache and error-free RLS on the
+        // joined table; either missing produces HTTP 500. Two queries avoid both.
         const { data: memberRows, error: memberErr } = await supabase
           .from('household_members')
-          .select('household_id, households(id, name, type, created_by)')
+          .select('household_id')
           .eq('user_id', userId);
 
-        // ── DIAGNOSTIC: full raw result ───────────────────────────────────────
-        console.log('[BT:workspace] DIAG memberErr:', memberErr ?? 'none');
+        console.log('[BT:workspace] DIAG memberErr:', memberErr ? JSON.stringify(memberErr) : 'none');
         console.log('[BT:workspace] DIAG memberRows count:', memberRows?.length ?? 'null');
-        console.log('[BT:workspace] DIAG memberRows raw:', JSON.stringify(memberRows));
-        if (memberRows) {
-          memberRows.forEach((r: Record<string, unknown>, i: number) => {
-            console.log(
-              `[BT:workspace] DIAG row[${i}]: household_id=${r.household_id}`,
-              `| households=${r.households === null ? 'NULL (RLS blocked join)' : JSON.stringify(r.households)}`
-            );
-          });
+        console.log('[BT:workspace] DIAG household_ids:', JSON.stringify(memberRows?.map((r) => r.household_id)));
+
+        if (memberErr) {
+          console.error('[BT:workspace] Failed to fetch member rows — code:', memberErr.code, '| message:', memberErr.message, '| details:', memberErr.details, '| hint:', memberErr.hint);
         }
 
-        if (memberErr) console.error('[BT:workspace] Failed to fetch member rows:', memberErr);
+        // ── Step 2: fetch household details for those IDs ─────────────────────
+        const householdIds = (memberRows ?? []).map((r: { household_id: string }) => r.household_id);
+        let householdRows: Array<{ id: string; name: string; type: string | null; created_by: string }> = [];
 
-        type HouseholdJoin = {
-          id: string;
-          name: string;
-          type: string | null;
-          created_by: string;
-        };
-        type MemberRow = {
-          household_id: string;
-          households: HouseholdJoin | HouseholdJoin[] | null;
-        };
+        if (householdIds.length > 0) {
+          const { data: hhData, error: hhErr } = await supabase
+            .from('households')
+            .select('id, name, type, created_by')
+            .in('id', householdIds);
 
-        const fetched: Workspace[] = ((memberRows ?? []) as MemberRow[])
-          .map((r) => {
-            const hhRaw = r.households;
-            const hh: HouseholdJoin | null = Array.isArray(hhRaw)
-              ? (hhRaw[0] ?? null)
-              : hhRaw;
-            if (!hh) {
-              console.warn('[BT:workspace] DIAG household join was null for household_id:', r.household_id,
-                '— likely RLS on households table blocking the embedded join');
-              return null;
-            }
+          console.log('[BT:workspace] DIAG hhErr:', hhErr ? JSON.stringify(hhErr) : 'none');
+          console.log('[BT:workspace] DIAG households count:', hhData?.length ?? 'null');
+
+          if (hhErr) {
+            console.error('[BT:workspace] Failed to fetch household details — code:', hhErr.code, '| message:', hhErr.message, '| details:', hhErr.details, '| hint:', hhErr.hint);
+          } else {
+            householdRows = hhData ?? [];
+          }
+        }
+
+        const fetched: Workspace[] = householdRows
+          .map((hh) => {
             const ws: Workspace = {
               id:          hh.id,
               name:        hh.name,
@@ -152,8 +149,7 @@ export function useWorkspace(
             };
             console.log('[BT:workspace] Found workspace:', ws.name, '| type:', ws.type, '| id:', ws.id);
             return ws;
-          })
-          .filter(Boolean) as Workspace[];
+          });
 
         // ── Ensure personal workspace exists ──────────────────────────────────
         let personalWs = fetched.find((w) => w.type === 'personal');
@@ -169,15 +165,15 @@ export function useWorkspace(
             .insert({ id: wsId, created_by: userId, name: personalName, type: 'personal' });
 
           if (hhErr) {
-            console.error('[BT:workspace] INSERT households failed:', hhErr);
+            console.error('[BT:workspace] INSERT households failed — code:', hhErr.code, '| message:', hhErr.message, '| details:', hhErr.details, '| hint:', hhErr.hint);
             console.error('[BT:workspace] Hint: if "column type does not exist", reload schema cache in Supabase → Settings → API');
           } else {
             const { error: memberInsertErr } = await supabase
               .from('household_members')
-              .insert({ household_id: wsId, user_id: userId, role: 'owner' });
+              .insert({ household_id: wsId, user_id: userId, role: 'owner', joined_at: new Date().toISOString() });
 
             if (memberInsertErr) {
-              console.error('[BT:workspace] INSERT household_members failed:', memberInsertErr);
+              console.error('[BT:workspace] INSERT household_members failed — code:', memberInsertErr.code, '| message:', memberInsertErr.message, '| details:', memberInsertErr.details, '| hint:', memberInsertErr.hint);
             } else {
               const [txRes, catRes] = await Promise.all([
                 supabase
@@ -191,8 +187,8 @@ export function useWorkspace(
                   .eq('user_id', userId)
                   .is('household_id', null),
               ]);
-              if (txRes.error) console.warn('[BT:workspace] Transaction backfill error:', txRes.error);
-              if (catRes.error) console.warn('[BT:workspace] Category backfill error:', catRes.error);
+              if (txRes.error) console.warn('[BT:workspace] Transaction backfill error — code:', txRes.error.code, '| message:', txRes.error.message, '| hint:', txRes.error.hint);
+              if (catRes.error) console.warn('[BT:workspace] Category backfill error — code:', catRes.error.code, '| message:', catRes.error.message, '| hint:', catRes.error.hint);
 
               personalWs = { id: wsId, name: personalName, type: 'personal', memberCount: 1 };
               fetched.unshift(personalWs);
