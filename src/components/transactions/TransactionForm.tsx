@@ -47,10 +47,21 @@ interface TransactionFormProps {
   /** Passed for duplicate detection in recurring mode */
   existingTransactions?: Transaction[];
   onSubmit: (data: Omit<Transaction, 'id' | 'createdAt'>) => void;
-  /** Called when the user confirms a recurring batch; receives only the non-duplicate dates */
+  /** New transaction: confirmed batch of dates → create series */
   onSubmitRecurring?: (
     data: Omit<Transaction, 'id' | 'createdAt'>,
     dates: string[]
+  ) => Promise<void>;
+  /** Edit transaction: delete original + create series */
+  onConvertToRecurring?: (
+    originalId: string,
+    data: Omit<Transaction, 'id' | 'createdAt'>,
+    dates: string[]
+  ) => Promise<void>;
+  /** Edit transaction: update every transaction sharing the same recurringGroupId */
+  onUpdateSeries?: (
+    groupId: string,
+    data: Omit<Transaction, 'id' | 'createdAt'>
   ) => Promise<void>;
   onCancel: () => void;
 }
@@ -61,6 +72,8 @@ interface FormErrors {
   date?: string;
 }
 
+type Phase = 'edit' | 'series-scope' | 'edit-intent' | 'confirm';
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function TransactionForm({
@@ -69,8 +82,12 @@ export function TransactionForm({
   existingTransactions = [],
   onSubmit,
   onSubmitRecurring,
+  onConvertToRecurring,
+  onUpdateSeries,
   onCancel,
 }: TransactionFormProps) {
+  const isNew = !transaction;
+
   // ── Field state ───────────────────────────────────────────────────────────
   const [type, setType]               = useState<TransactionType>(transaction?.type ?? 'expense');
   const [amount, setAmount]           = useState(transaction?.amount.toString() ?? '');
@@ -79,28 +96,24 @@ export function TransactionForm({
   const [description, setDescription] = useState(transaction?.description ?? '');
   const [errors, setErrors]           = useState<FormErrors>({});
 
-  // ── Recurring state (new transactions only) ───────────────────────────────
-  const [recurringEnabled, setRecurringEnabled] = useState(false);
+  // ── Recurring state ───────────────────────────────────────────────────────
+  // Pre-fill toggle from transaction when editing
+  const [recurringEnabled, setRecurringEnabled] = useState(transaction?.isRecurring ?? false);
   const [monthsBack, setMonthsBack]             = useState(0);
   const [monthsForward, setMonthsForward]       = useState(0);
 
-  // ── DEBUG LOGGING ─────────────────────────────────────────────────────────
-  const isNew = !transaction;
-  console.log('[BT-DEBUG] Rendering TransactionForm modal');
-  console.log('[BT-DEBUG] isNew (no transaction prop):', isNew);
-  console.log('[BT-DEBUG] onSubmitRecurring provided:', !!onSubmitRecurring);
-  console.log('[BT-DEBUG] Recurring UI will render:', isNew && !!onSubmitRecurring);
-  console.log('[BT-DEBUG] recurringEnabled state:', recurringEnabled);
-
-  // ── Confirmation phase state ──────────────────────────────────────────────
-  const [phase, setPhase]               = useState<'edit' | 'confirm'>('edit');
+  // ── Phase / confirmation state ────────────────────────────────────────────
+  const [phase, setPhase]                   = useState<Phase>('edit');
   const [confirmedDates, setConfirmedDates] = useState<string[]>([]);
   const [duplicateDates, setDuplicateDates] = useState<Set<string>>(new Set());
-  const [saving, setSaving]             = useState(false);
+  const [saving, setSaving]                 = useState(false);
+  // snapshot of validated form data passed forward through phases
+  const [pendingData, setPendingData]       = useState<Omit<Transaction, 'id' | 'createdAt'> | null>(null);
 
-  // isNew already declared above in the debug section
   const availableCategories = getCategoriesForType(type);
   const totalMonths         = monthsBack + 1 + monthsForward;
+  // Recurring section visible only when the signed-in callbacks are provided
+  const hasRecurringProp    = !!onSubmitRecurring;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const clearError = (field: keyof FormErrors) =>
@@ -126,74 +139,247 @@ export function TransactionForm({
         : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-900 dark:text-slate-100'
     }`;
 
-  // ── Submit (edit phase) ───────────────────────────────────────────────────
+  const buildData = (): Omit<Transaction, 'id' | 'createdAt'> => ({
+    type,
+    amount:      Math.round(parseFloat(amount) * 100) / 100,
+    category,
+    date,
+    description: description.trim(),
+    isRecurring: recurringEnabled,
+  });
+
+  // Compute dates + dupes, snapshot pendingData, go to confirm phase
+  const goToConfirm = (
+    data: Omit<Transaction, 'id' | 'createdAt'>,
+    excludeId?: string
+  ) => {
+    const dates     = generateMonthlyDates(date, monthsBack, monthsForward);
+    const descLower = data.description.toLowerCase();
+    // Exclude the original transaction from dupe detection when converting
+    const comparables = excludeId
+      ? existingTransactions.filter((t) => t.id !== excludeId)
+      : existingTransactions;
+
+    const dupes = new Set<string>(
+      dates.filter((d) => {
+        const month = d.substring(0, 7);
+        return comparables.some(
+          (t) =>
+            t.date.substring(0, 7) === month &&
+            Math.abs(t.amount - data.amount) < 0.01 &&
+            t.type === type &&
+            t.category === category &&
+            t.description.trim().toLowerCase() === descLower
+        );
+      })
+    );
+
+    setPendingData(data);
+    setConfirmedDates(dates);
+    setDuplicateDates(dupes);
+    setPhase('confirm');
+  };
+
+  // ── Submit from edit phase ────────────────────────────────────────────────
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
-    const parsedAmount = Math.round(parseFloat(amount) * 100) / 100;
-    const desc         = description.trim();
+    const data = buildData();
+    setPendingData(data);
 
-    // Recurring batch path: go to confirmation step
-    if (isNew && recurringEnabled && onSubmitRecurring && (monthsBack > 0 || monthsForward > 0)) {
-      const dates = generateMonthlyDates(date, monthsBack, monthsForward);
-      const descLower = desc.toLowerCase();
-
-      const dupes = new Set<string>(
-        dates.filter((d) => {
-          const month = d.substring(0, 7);
-          return existingTransactions.some(
-            (t) =>
-              t.date.substring(0, 7) === month &&
-              Math.abs(t.amount - parsedAmount) < 0.01 &&
-              t.type === type &&
-              t.category === category &&
-              t.description.trim().toLowerCase() === descLower
-          );
-        })
-      );
-
-      setConfirmedDates(dates);
-      setDuplicateDates(dupes);
-      setPhase('confirm');
+    // ── NEW transaction ───────────────────────────────────────────────────
+    if (isNew) {
+      if (recurringEnabled && hasRecurringProp && (monthsBack > 0 || monthsForward > 0)) {
+        goToConfirm(data);
+      } else {
+        onSubmit(data);
+      }
       return;
     }
 
-    // Single transaction path (unchanged)
-    onSubmit({
-      type,
-      amount:      parsedAmount,
-      category,
-      date,
-      description: desc,
-      isRecurring: transaction?.isRecurring,
-    });
+    // ── EDIT transaction ──────────────────────────────────────────────────
+    // Case 1: already part of a series → ask scope (this vs entire series)
+    if (transaction!.recurringGroupId && onUpdateSeries) {
+      setPhase('series-scope');
+      return;
+    }
+    // Case 2: user toggled recurring ON → ask intent
+    if (recurringEnabled && hasRecurringProp && onConvertToRecurring) {
+      setPhase('edit-intent');
+      return;
+    }
+    // Case 3: plain update
+    onSubmit(data);
   };
 
-  // ── Confirm recurring batch ───────────────────────────────────────────────
+  // ── Confirm recurring batch (new create or edit→convert) ─────────────────
   const handleConfirm = async () => {
-    if (!onSubmitRecurring) return;
+    if (!pendingData) return;
     const nonDupeDates = confirmedDates.filter((d) => !duplicateDates.has(d));
     if (nonDupeDates.length === 0) { onCancel(); return; }
+
     setSaving(true);
-    await onSubmitRecurring(
-      {
-        type,
-        amount:      Math.round(parseFloat(amount) * 100) / 100,
-        category,
-        date,
-        description: description.trim(),
-        isRecurring: true,
-      },
-      nonDupeDates
-    );
+    if (isNew) {
+      if (onSubmitRecurring) await onSubmitRecurring(pendingData, nonDupeDates);
+    } else {
+      // Delete original + create series
+      if (onConvertToRecurring && transaction) {
+        await onConvertToRecurring(transaction.id, pendingData, nonDupeDates);
+      }
+    }
     setSaving(false);
   };
 
   const handleTypeChange = (next: TransactionType) => { setType(next); setCategory(''); };
 
   // ════════════════════════════════════════════════════════════════════════════
-  // CONFIRM PHASE
+  // PHASE: series-scope — "Edit this occurrence or the entire series?"
+  // Shown when editing a transaction that already belongs to a recurring series.
+  // ════════════════════════════════════════════════════════════════════════════
+  if (phase === 'series-scope' && pendingData) {
+    return (
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setPhase('edit')}
+          disabled={saving}
+          className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
+        >
+          <ChevronLeft size={15} />
+          Back to edit
+        </button>
+
+        <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-1">
+            This transaction is part of a recurring series.
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            What would you like to update?
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => onSubmit(pendingData)}
+            className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
+          >
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100 group-hover:text-blue-700 dark:group-hover:text-blue-300">
+              This occurrence only
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Only this specific transaction will be changed.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              await onUpdateSeries!(transaction!.recurringGroupId!, pendingData);
+              setSaving(false);
+            }}
+            className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group disabled:opacity-50"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-100 group-hover:text-blue-700 dark:group-hover:text-blue-300">
+                  Entire series
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  All transactions in this recurring series will be updated.
+                </p>
+              </div>
+              {saving && <Loader2 size={14} className="animate-spin text-blue-500 shrink-0" />}
+            </div>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-full py-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE: edit-intent — "Apply to this transaction or convert to series?"
+  // Shown when editing a non-series transaction with recurring toggle enabled.
+  // ════════════════════════════════════════════════════════════════════════════
+  if (phase === 'edit-intent' && pendingData) {
+    const canConvert = monthsBack > 0 || monthsForward > 0;
+    return (
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setPhase('edit')}
+          disabled={saving}
+          className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
+        >
+          <ChevronLeft size={15} />
+          Back to edit
+        </button>
+
+        <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40">
+          <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+            What would you like to do?
+          </p>
+          <p className="text-xs text-blue-700 dark:text-blue-300">
+            You enabled "Recurring" on this transaction.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => onSubmit({ ...pendingData, isRecurring: true })}
+            className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
+          >
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100 group-hover:text-blue-700 dark:group-hover:text-blue-300">
+              Apply only to this transaction
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Mark this transaction as recurring — no new entries are created.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            disabled={!canConvert}
+            onClick={() => goToConfirm({ ...pendingData, isRecurring: true }, transaction?.id)}
+            className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100 group-hover:text-blue-700 dark:group-hover:text-blue-300">
+              Convert to recurring series
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {canConvert
+                ? `Creates ${totalMonths} transaction${totalMonths !== 1 ? 's' : ''} — this one is replaced by the series.`
+                : 'Go back and set "Months before" or "Months after" first.'}
+            </p>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-full py-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE: confirm — scrollable date list with duplicate detection
+  // Shared by both new-create and edit-convert flows.
   // ════════════════════════════════════════════════════════════════════════════
   if (phase === 'confirm') {
     const nonDupes     = confirmedDates.filter((d) => !duplicateDates.has(d));
@@ -206,18 +392,21 @@ export function TransactionForm({
         {/* Back */}
         <button
           type="button"
-          onClick={() => setPhase('edit')}
+          onClick={() => setPhase(isNew ? 'edit' : 'edit-intent')}
           disabled={saving}
           className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
         >
           <ChevronLeft size={15} />
-          Back to edit
+          Back
         </button>
 
         {/* Summary card */}
         <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40">
           <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
             {confirmedDates.length} recurring transaction{confirmedDates.length !== 1 ? 's' : ''}
+            {!isNew && (
+              <span className="font-normal text-blue-700 dark:text-blue-300"> — original replaced</span>
+            )}
           </p>
           <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
             {fmtDate(firstDate)} → {fmtDate(lastDate)}
@@ -292,7 +481,7 @@ export function TransactionForm({
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // EDIT PHASE
+  // PHASE: edit — main form (new and edit modes)
   // ════════════════════════════════════════════════════════════════════════════
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -357,7 +546,7 @@ export function TransactionForm({
         {errors.category && <p className="mt-1 text-xs text-rose-500">{errors.category}</p>}
       </div>
 
-      {/* Date — no future cap when creating recurring months forward */}
+      {/* Date — no future cap when user is setting months forward */}
       <div>
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
           Date
@@ -387,16 +576,11 @@ export function TransactionForm({
         />
       </div>
 
-      {/* ── Recurring section (new transactions only) ── */}
-      {/* DEBUG BANNER — remove after confirming deployment */}
-      <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 text-center">
-        RECURRING FEATURE ACTIVE · isNew={String(isNew)} · hasRecurringProp={String(!!onSubmitRecurring)}
-      </p>
-
-      {isNew && onSubmitRecurring && (
+      {/* ── Recurring section (signed-in users only) ── */}
+      {hasRecurringProp && (
         <div className="border-t border-slate-100 dark:border-slate-700 pt-4 space-y-3">
-          {/* Toggle row — log that we got here */}
-          {console.log('[BT-DEBUG] Recurring UI rendered') as unknown as null}
+
+          {/* Toggle row */}
           <label className="flex items-center justify-between cursor-pointer select-none">
             <div className="flex items-center gap-2.5">
               <RefreshCw
@@ -407,7 +591,6 @@ export function TransactionForm({
                 Recurring transaction
               </span>
             </div>
-            {/* Toggle switch */}
             <button
               type="button"
               role="switch"
@@ -425,8 +608,8 @@ export function TransactionForm({
             </button>
           </label>
 
-          {/* Expanded options */}
-          {recurringEnabled && (
+          {/* Months before/after — only shown when a series can be created/extended */}
+          {recurringEnabled && (isNew || (!transaction?.recurringGroupId && !!onConvertToRecurring)) && (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -478,6 +661,14 @@ export function TransactionForm({
                 .
               </p>
             </>
+          )}
+
+          {/* Hint for transactions already in a series */}
+          {!isNew && transaction?.recurringGroupId && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <RefreshCw size={11} className="text-blue-400 shrink-0" />
+              Part of a recurring series — you can edit this occurrence or the entire series.
+            </p>
           )}
         </div>
       )}

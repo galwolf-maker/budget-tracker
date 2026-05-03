@@ -396,6 +396,53 @@ export function useTransactions(userId: string | null, householdId: string | nul
     [userId, householdId, setTransactions]
   );
 
+  const updateRecurringSeries = useCallback(
+    async (
+      groupId: string,
+      data: Omit<Transaction, 'id' | 'createdAt'>
+    ): Promise<string | null> => {
+      // Optimistic: update every transaction in the group
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.recurringGroupId === groupId
+            ? {
+                ...t,
+                type:        data.type,
+                amount:      data.amount,
+                category:    data.category,
+                description: data.description,
+                isRecurring: true,
+              }
+            : t
+        )
+      );
+
+      if (userId && supabase && householdId) {
+        const { error } = await supabase
+          .from('transactions')
+          .update({
+            type:         data.type,
+            amount:       data.amount,
+            category:     data.category,
+            description:  data.description,
+            is_recurring: true,
+          })
+          .eq('recurring_group_id', groupId)
+          .eq('household_id', householdId);
+
+        if (error) {
+          console.error('[BT] updateRecurringSeries failed:', error);
+          return error.message;
+        }
+        console.log('[BT] Updated recurring series ✓', groupId);
+      } else {
+        console.warn('[BT] updateRecurringSeries SKIPPED — userId:', userId, 'householdId:', householdId);
+      }
+      return null;
+    },
+    [userId, householdId, setTransactions]
+  );
+
   const markRecurring = useCallback(
     async (id: string, flag: boolean) => {
       setTransactions((prev) =>
@@ -556,6 +603,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
     moveTransactions,
     importTransactions,
     addRecurringTransactions,
+    updateRecurringSeries,
     markRecurring,
     recurringAutoAdded,
     clearRecurringAutoAdded,

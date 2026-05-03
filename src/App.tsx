@@ -140,6 +140,7 @@ export default function App() {
     moveTransactions,
     importTransactions,
     addRecurringTransactions,
+    updateRecurringSeries,
     markRecurring,
     recurringAutoAdded,
     clearRecurringAutoAdded,
@@ -289,6 +290,43 @@ export default function App() {
       }
     },
     [addRecurringTransactions, toast, closeForm]
+  );
+
+  // Edit mode: delete the original transaction then create the recurring series
+  const handleConvertToRecurring = useCallback(
+    async (
+      originalId: string,
+      data: Omit<Transaction, 'id' | 'createdAt'>,
+      dates: string[]
+    ) => {
+      deleteTransaction(originalId);
+      const result = await addRecurringTransactions(data, dates);
+      if (result.error) {
+        toast('error', `Failed to convert to recurring: ${result.error}`);
+      } else {
+        closeForm();
+        const { created, skipped } = result;
+        const msg = skipped > 0
+          ? `Converted to recurring: ${created} transaction${created !== 1 ? 's' : ''} created (${skipped} duplicate${skipped !== 1 ? 's' : ''} skipped).`
+          : `Converted to recurring: ${created} transaction${created !== 1 ? 's' : ''} created.`;
+        toast('success', msg);
+      }
+    },
+    [deleteTransaction, addRecurringTransactions, toast, closeForm]
+  );
+
+  // Edit mode: update every transaction in an existing recurring series
+  const handleUpdateSeries = useCallback(
+    async (groupId: string, data: Omit<Transaction, 'id' | 'createdAt'>) => {
+      const error = await updateRecurringSeries(groupId, data);
+      if (error) {
+        toast('error', `Failed to update series: ${error}`);
+      } else {
+        closeForm();
+        toast('success', 'Entire recurring series updated.');
+      }
+    },
+    [updateRecurringSeries, toast, closeForm]
   );
 
   const handleDelete = useCallback(
@@ -576,6 +614,8 @@ export default function App() {
           existingTransactions={isGuestMode ? [] : realTransactions}
           onSubmit={handleFormSubmit}
           onSubmitRecurring={user ? handleFormSubmitRecurring : undefined}
+          onConvertToRecurring={user ? handleConvertToRecurring : undefined}
+          onUpdateSeries={user ? handleUpdateSeries : undefined}
           onCancel={closeForm}
         />
       </Modal>
