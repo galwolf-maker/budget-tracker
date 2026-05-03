@@ -36,6 +36,9 @@ export interface TxnRow {
   description: string;
   is_recurring: boolean;
   created_at: string;
+  // Optional columns — only sent/read when present in DB schema
+  recurring_group_id?: string | null;
+  recurring_frequency?: string | null;
 }
 
 export interface CatRow {
@@ -79,15 +82,17 @@ export interface InvitationRow {
 
 export function rowToTxn(r: TxnRow): Transaction {
   return {
-    id:          r.id,
-    type:        r.type as Transaction['type'],
-    amount:      Number(r.amount),
-    category:    r.category,
-    date:        r.date,
-    description: r.description,
-    isRecurring: r.is_recurring,
-    createdBy:   r.created_by ?? undefined,
-    createdAt:   r.created_at,
+    id:               r.id,
+    type:             r.type as Transaction['type'],
+    amount:           Number(r.amount),
+    category:         r.category,
+    date:             r.date,
+    description:      r.description,
+    isRecurring:      r.is_recurring,
+    recurringGroupId: r.recurring_group_id ?? undefined,
+    recurringFrequency: (r.recurring_frequency as Transaction['recurringFrequency']) ?? undefined,
+    createdBy:        r.created_by ?? undefined,
+    createdAt:        r.created_at,
   };
 }
 
@@ -108,6 +113,10 @@ export function txnToRow(
     description:  t.description,
     is_recurring: t.isRecurring ?? false,
     created_at:   t.createdAt,
+    // Only include optional recurring columns when they have a value — if the
+    // DB columns don't exist yet the INSERT will silently omit them.
+    ...(t.recurringGroupId  ? { recurring_group_id:  t.recurringGroupId }              : {}),
+    ...(t.recurringFrequency ? { recurring_frequency: t.recurringFrequency }            : {}),
   };
 }
 

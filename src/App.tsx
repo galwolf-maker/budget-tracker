@@ -139,6 +139,7 @@ export default function App() {
     copyTransactions,
     moveTransactions,
     importTransactions,
+    addRecurringTransactions,
     markRecurring,
     recurringAutoAdded,
     clearRecurringAutoAdded,
@@ -271,6 +272,23 @@ export default function App() {
       closeForm();
     },
     [editingTransaction, updateTransaction, addTransaction, saveMerchantRule, toast, closeForm]
+  );
+
+  const handleFormSubmitRecurring = useCallback(
+    async (data: Omit<Transaction, 'id' | 'createdAt'>, dates: string[]) => {
+      const result = await addRecurringTransactions(data, dates);
+      if (result.error) {
+        toast('error', `Failed to create recurring transactions: ${result.error}`);
+      } else {
+        closeForm();
+        const { created, skipped } = result;
+        const msg = skipped > 0
+          ? `Created ${created} recurring transaction${created !== 1 ? 's' : ''} (${skipped} duplicate${skipped !== 1 ? 's' : ''} skipped).`
+          : `Created ${created} recurring transaction${created !== 1 ? 's' : ''}.`;
+        toast('success', msg);
+      }
+    },
+    [addRecurringTransactions, toast, closeForm]
   );
 
   const handleDelete = useCallback(
@@ -555,7 +573,9 @@ export default function App() {
         <TransactionForm
           transaction={editingTransaction}
           getCategoriesForType={getCategoriesForType}
+          existingTransactions={isGuestMode ? [] : realTransactions}
           onSubmit={handleFormSubmit}
+          onSubmitRecurring={user ? handleFormSubmitRecurring : undefined}
           onCancel={closeForm}
         />
       </Modal>

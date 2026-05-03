@@ -327,6 +327,75 @@ export function useTransactions(userId: string | null, householdId: string | nul
     [userId, householdId, setTransactions]
   );
 
+  // ── addRecurringTransactions ──────────────────────────────────────────────
+  // Inserts one transaction per date in `dates`, sharing a recurringGroupId.
+  // Dates that already have a matching transaction (same amount/type/category/
+  // description in the same calendar month) are silently skipped.
+  const addRecurringTransactions = useCallback(
+    async (
+      data: Omit<Transaction, 'id' | 'createdAt'>,
+      dates: string[]
+    ): Promise<{ created: number; skipped: number; error?: string }> => {
+      if (dates.length === 0) return { created: 0, skipped: 0 };
+
+      const now        = new Date().toISOString();
+      const groupId    = crypto.randomUUID();
+      const current    = txnsRef.current;
+      const descNorm   = (data.description ?? '').trim().toLowerCase();
+
+      // Duplicate detection: skip months that already have a matching entry
+      const toCreate: string[] = [];
+      let   skippedCount = 0;
+
+      for (const d of dates) {
+        const month = d.substring(0, 7);
+        const isDupe = current.some(
+          (t) =>
+            t.date.substring(0, 7) === month &&
+            Math.abs(t.amount - data.amount) < 0.01 &&
+            t.type === data.type &&
+            t.category === data.category &&
+            t.description.trim().toLowerCase() === descNorm
+        );
+        if (isDupe) { skippedCount++; } else { toCreate.push(d); }
+      }
+
+      if (toCreate.length === 0) return { created: 0, skipped: skippedCount };
+
+      const newTxns: Transaction[] = toCreate.map((d) => ({
+        ...data,
+        id:                 generateId(),
+        date:               d,
+        createdAt:          now,
+        createdBy:          userId ?? undefined,
+        isRecurring:        true,
+        recurringGroupId:   groupId,
+        recurringFrequency: 'monthly' as const,
+      }));
+
+      // Optimistic update
+      setTransactions((prev) => [...newTxns, ...prev]);
+
+      if (userId && supabase && householdId) {
+        const { error } = await supabase
+          .from('transactions')
+          .insert(newTxns.map((t) => txnToRow(userId, t, householdId)));
+
+        if (error) {
+          console.error('[BT] addRecurringTransactions failed:', error);
+          // Rollback
+          const ids = new Set(newTxns.map((t) => t.id));
+          setTransactions((prev) => prev.filter((t) => !ids.has(t.id)));
+          return { created: 0, skipped: skippedCount, error: error.message };
+        }
+        console.log('[BT] Recurring transactions saved ✓', toCreate.length);
+      }
+
+      return { created: toCreate.length, skipped: skippedCount };
+    },
+    [userId, householdId, setTransactions]
+  );
+
   const markRecurring = useCallback(
     async (id: string, flag: boolean) => {
       setTransactions((prev) =>
@@ -474,9 +543,11 @@ export function useTransactions(userId: string | null, householdId: string | nul
     [transactions]
   );
 
+  // ── dataLoaded exposed so App can gate the recurring submit ─────────────
   return {
     transactions,
     syncing,
+    dataLoaded,
     addTransaction,
     updateTransaction,
     deleteTransaction,
@@ -484,6 +555,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
     copyTransactions,
     moveTransactions,
     importTransactions,
+    addRecurringTransactions,
     markRecurring,
     recurringAutoAdded,
     clearRecurringAutoAdded,

@@ -11,6 +11,7 @@ export interface Transaction {
   createdAt: string; // ISO timestamp
   isRecurring?: boolean;
   recurringFrequency?: 'monthly' | 'weekly';
+  recurringGroupId?: string; // links all transactions created in one batch
   createdBy?: string; // user_id of who added it
 }
 
