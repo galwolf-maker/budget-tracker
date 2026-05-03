@@ -44,6 +44,16 @@ export function WorkspaceModal({
     console.log('[BT:WorkspaceModal] role            :', currentMember?.role ?? '(not found in members)');
     console.log('[BT:WorkspaceModal] onDeleteWorkspace provided:', !!onDeleteWorkspace);
     console.log('[BT:WorkspaceModal] isActiveWorkspace:', isActiveWorkspace);
+    const isPersonalLocal = workspace.type === 'personal';
+    const canDeleteLocal = !isPersonalLocal && !!onDeleteWorkspace;
+    console.log('[BT:WorkspaceModal] canDelete (section visible):', canDeleteLocal);
+    console.log('[BT:WorkspaceModal] delete button vs amber warning:',
+      !canDeleteLocal
+        ? 'HIDDEN — workspace is personal or onDeleteWorkspace not provided'
+        : isActiveWorkspace
+          ? 'AMBER WARNING — workspace is currently active (this is always true when opened via sidebar)'
+          : 'DELETE BUTTON — visible'
+    );
     console.log('[BT:WorkspaceModal] ============================================');
   }, [isOpen, members, currentUserId, workspace.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
