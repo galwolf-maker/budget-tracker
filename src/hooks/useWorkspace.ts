@@ -390,8 +390,8 @@ export function useWorkspace(
 
   // ── deleteWorkspace ────────────────────────────────────────────────────────
   // Deletes a shared workspace and all its associated data in dependency order.
-  // Guards: personal workspaces, non-owners, and the currently active workspace
-  // are all hard-blocked before any DB write is attempted.
+  // If the deleted workspace is currently active, the user is automatically
+  // switched to their personal workspace after deletion.
   const deleteWorkspace = useCallback(
     async (workspaceId: string): Promise<string | null> => {
       if (!supabase || !userId) return 'Not ready';
@@ -400,11 +400,6 @@ export function useWorkspace(
       const ws = workspaces.find((w) => w.id === workspaceId);
       if (!ws) return 'Workspace not found';
       if (ws.type === 'personal') return 'Personal workspaces cannot be deleted';
-
-      // ── Guard: must not be the currently active workspace ────────────────
-      if (workspaceId === activeWorkspaceId) {
-        return 'Switch to a different workspace before deleting this one';
-      }
 
       // ── Guard: current user must be owner (verified via DB) ─────────────
       const { data: memberRow, error: memberCheckErr } = await supabase
@@ -466,11 +461,24 @@ export function useWorkspace(
       }
 
       // ── Remove from local state ───────────────────────────────────────────
-      setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+      const nextWorkspaces = workspaces.filter((w) => w.id !== workspaceId);
+      setWorkspaces(nextWorkspaces);
       console.log('[BT:workspace] Workspace deleted:', workspaceId);
+
+      // ── If this was the active workspace, switch to personal ──────────────
+      if (workspaceId === activeWorkspaceId) {
+        const personal = nextWorkspaces.find((w) => w.type === 'personal');
+        const fallback = personal ?? nextWorkspaces[0] ?? null;
+        if (fallback) {
+          console.log('[BT:workspace] Deleted workspace was active — switching to:', fallback.name);
+          persistActive(fallback.id);
+          await loadMembers(fallback.id);
+        }
+      }
+
       return null;
     },
-    [userId, workspaces, activeWorkspaceId]
+    [userId, workspaces, activeWorkspaceId, persistActive, loadMembers]
   );
 
   // ── createSharedWorkspace ──────────────────────────────────────────────────
