@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Copy, Check, Users, Crown, User, Lock, Link, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import type { HouseholdMember, Workspace } from '../../types';
 
@@ -30,12 +30,39 @@ export function WorkspaceModal({
   const [deletePhase, setDeletePhase] = useState<'idle' | 'confirm' | 'deleting'>('idle');
   const isDeleting = deletePhase === 'deleting';
 
+  // ── Diagnostics ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) return;
+    const currentMember = members.find((m) => m.userId === currentUserId);
+    console.log('[BT:WorkspaceModal] === DELETE VISIBILITY DEBUG ===');
+    console.log('[BT:WorkspaceModal] workspace.id   :', workspace.id);
+    console.log('[BT:WorkspaceModal] workspace.type :', workspace.type);
+    console.log('[BT:WorkspaceModal] currentUserId  :', currentUserId);
+    console.log('[BT:WorkspaceModal] members count  :', members.length);
+    console.log('[BT:WorkspaceModal] members        :', JSON.stringify(members));
+    console.log('[BT:WorkspaceModal] currentMember  :', JSON.stringify(currentMember ?? null));
+    console.log('[BT:WorkspaceModal] role            :', currentMember?.role ?? '(not found in members)');
+    console.log('[BT:WorkspaceModal] onDeleteWorkspace provided:', !!onDeleteWorkspace);
+    console.log('[BT:WorkspaceModal] isActiveWorkspace:', isActiveWorkspace);
+    console.log('[BT:WorkspaceModal] ============================================');
+  }, [isOpen, members, currentUserId, workspace.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!isOpen) return null;
 
   const isPersonal = workspace.type === 'personal';
   const currentMember = members.find((m) => m.userId === currentUserId);
   const isOwner = currentMember?.role === 'owner';
-  const canDelete = !isPersonal && isOwner && !!onDeleteWorkspace;
+
+  // The delete button is shown whenever:
+  //   • workspace is shared (not personal)
+  //   • the parent passed onDeleteWorkspace (App.tsx only does this for shared workspaces)
+  //
+  // We do NOT gate on isOwner here — the members list may be empty due to RLS
+  // only returning the user's own row, or a transient load failure.  The real
+  // ownership check is enforced inside useWorkspace.deleteWorkspace() via a
+  // fresh DB query, so the UI just needs to show the button and let the hook
+  // return an error if the user turns out not to be the owner.
+  const canDelete = !isPersonal && !!onDeleteWorkspace;
 
   const handleCopy = async () => {
     if (!joinUrl) return;
