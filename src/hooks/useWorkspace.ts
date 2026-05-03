@@ -417,47 +417,20 @@ export function useWorkspace(
         return 'Only the workspace owner can delete it';
       }
 
-      console.log('[BT:workspace] Deleting shared workspace:', workspaceId);
+      console.log('[BT:workspace] Deleting shared workspace via RPC:', workspaceId);
 
-      // ── Delete in dependency order ────────────────────────────────────────
-      // 1. Transactions
-      const { error: txErr } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('household_id', workspaceId);
-      if (txErr) {
-        console.error('[BT:workspace] Delete transactions failed:', txErr.message);
-        return `Failed to delete transactions: ${txErr.message}`;
-      }
-
-      // 2. Categories
-      const { error: catErr } = await supabase
-        .from('categories')
-        .delete()
-        .eq('household_id', workspaceId);
-      if (catErr) {
-        console.error('[BT:workspace] Delete categories failed:', catErr.message);
-        return `Failed to delete categories: ${catErr.message}`;
-      }
-
-      // 3. Members
-      const { error: membersErr } = await supabase
-        .from('household_members')
-        .delete()
-        .eq('household_id', workspaceId);
-      if (membersErr) {
-        console.error('[BT:workspace] Delete household_members failed:', membersErr.message);
-        return `Failed to delete members: ${membersErr.message}`;
-      }
-
-      // 4. Household itself
-      const { error: hhErr } = await supabase
-        .from('households')
-        .delete()
-        .eq('id', workspaceId);
-      if (hhErr) {
-        console.error('[BT:workspace] Delete household failed:', hhErr.message);
-        return `Failed to delete workspace: ${hhErr.message}`;
+      // ── Single SECURITY DEFINER RPC — bypasses RLS on all four tables ─────
+      // Direct DELETE queries through PostgREST hit RLS policies on
+      // household_members which can recurse. The RPC runs as the function
+      // owner (postgres) so no policy is evaluated, and all four deletes are
+      // performed atomically inside one transaction.
+      const { error: rpcErr } = await supabase.rpc('delete_shared_workspace', {
+        p_workspace_id: workspaceId,
+      });
+      if (rpcErr) {
+        console.error('[BT:workspace] delete_shared_workspace RPC failed:', rpcErr.message);
+        // Surface the server-side exception message directly — it's human-readable
+        return rpcErr.message;
       }
 
       // ── Remove from local state ───────────────────────────────────────────
