@@ -14,6 +14,13 @@ export interface UseWorkspaceReturn {
   /** Join a shared workspace by its ID. Returns error string or null on success. */
   joinWorkspace: (workspaceId: string) => Promise<{ workspaceName: string } | { error: string }>;
   createSharedWorkspace: (name: string) => Promise<string | null>;
+  /**
+   * Permanently delete a SHARED workspace and all its data.
+   * Returns null on success or an error string on failure.
+   * Refuses if: workspace is personal, user is not the owner,
+   * or the workspace is currently active.
+   */
+  deleteWorkspace: (workspaceId: string) => Promise<string | null>;
 }
 
 function lsKey(userId: string) {
@@ -381,6 +388,91 @@ export function useWorkspace(
     [persistActive, loadMembers]
   );
 
+  // ── deleteWorkspace ────────────────────────────────────────────────────────
+  // Deletes a shared workspace and all its associated data in dependency order.
+  // Guards: personal workspaces, non-owners, and the currently active workspace
+  // are all hard-blocked before any DB write is attempted.
+  const deleteWorkspace = useCallback(
+    async (workspaceId: string): Promise<string | null> => {
+      if (!supabase || !userId) return 'Not ready';
+
+      // ── Guard: never delete personal workspaces ──────────────────────────
+      const ws = workspaces.find((w) => w.id === workspaceId);
+      if (!ws) return 'Workspace not found';
+      if (ws.type === 'personal') return 'Personal workspaces cannot be deleted';
+
+      // ── Guard: must not be the currently active workspace ────────────────
+      if (workspaceId === activeWorkspaceId) {
+        return 'Switch to a different workspace before deleting this one';
+      }
+
+      // ── Guard: current user must be owner (verified via DB) ─────────────
+      const { data: memberRow, error: memberCheckErr } = await supabase
+        .from('household_members')
+        .select('role')
+        .eq('household_id', workspaceId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (memberCheckErr) {
+        console.error('[BT:workspace] deleteWorkspace ownership check failed:', memberCheckErr.message);
+        return 'Could not verify ownership';
+      }
+      if (!memberRow || memberRow.role !== 'owner') {
+        return 'Only the workspace owner can delete it';
+      }
+
+      console.log('[BT:workspace] Deleting shared workspace:', workspaceId);
+
+      // ── Delete in dependency order ────────────────────────────────────────
+      // 1. Transactions
+      const { error: txErr } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('household_id', workspaceId);
+      if (txErr) {
+        console.error('[BT:workspace] Delete transactions failed:', txErr.message);
+        return `Failed to delete transactions: ${txErr.message}`;
+      }
+
+      // 2. Categories
+      const { error: catErr } = await supabase
+        .from('categories')
+        .delete()
+        .eq('household_id', workspaceId);
+      if (catErr) {
+        console.error('[BT:workspace] Delete categories failed:', catErr.message);
+        return `Failed to delete categories: ${catErr.message}`;
+      }
+
+      // 3. Members
+      const { error: membersErr } = await supabase
+        .from('household_members')
+        .delete()
+        .eq('household_id', workspaceId);
+      if (membersErr) {
+        console.error('[BT:workspace] Delete household_members failed:', membersErr.message);
+        return `Failed to delete members: ${membersErr.message}`;
+      }
+
+      // 4. Household itself
+      const { error: hhErr } = await supabase
+        .from('households')
+        .delete()
+        .eq('id', workspaceId);
+      if (hhErr) {
+        console.error('[BT:workspace] Delete household failed:', hhErr.message);
+        return `Failed to delete workspace: ${hhErr.message}`;
+      }
+
+      // ── Remove from local state ───────────────────────────────────────────
+      setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+      console.log('[BT:workspace] Workspace deleted:', workspaceId);
+      return null;
+    },
+    [userId, workspaces, activeWorkspaceId]
+  );
+
   // ── createSharedWorkspace ──────────────────────────────────────────────────
   const createSharedWorkspace = useCallback(
     async (name: string): Promise<string | null> => {
@@ -427,5 +519,6 @@ export function useWorkspace(
     getJoinUrl,
     joinWorkspace,
     createSharedWorkspace,
+    deleteWorkspace,
   };
 }

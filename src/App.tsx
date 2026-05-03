@@ -124,6 +124,7 @@ export default function App() {
     getJoinUrl,
     joinWorkspace,
     createSharedWorkspace,
+    deleteWorkspace,
   } = useWorkspace(userId, userEmail);
 
   const householdId = activeWorkspaceId;
@@ -364,6 +365,22 @@ export default function App() {
     [deleteTransaction, handleKeepBothDuplicate]
   );
 
+  // ── Delete workspace ──────────────────────────────────────────────────────
+  const handleDeleteWorkspace = useCallback(
+    async (workspaceId: string): Promise<string | null> => {
+      const wsName = workspaces.find((w) => w.id === workspaceId)?.name ?? 'workspace';
+      const error = await deleteWorkspace(workspaceId);
+      if (error) {
+        toast('error', error);
+      } else {
+        setIsWorkspaceOpen(false);
+        toast('success', `Workspace "${wsName}" has been permanently deleted.`);
+      }
+      return error;
+    },
+    [deleteWorkspace, workspaces, toast]
+  );
+
   // ── Export / import ────────────────────────────────────────────────────
   const handleExport = useCallback(() => exportToXlsx(transactions), [transactions]);
 
@@ -572,6 +589,8 @@ export default function App() {
           members={members}
           currentUserId={userId!}
           joinUrl={getJoinUrl()}
+          isActiveWorkspace={activeWorkspace.id === activeWorkspaceId}
+          onDeleteWorkspace={activeWorkspace.type === 'shared' ? handleDeleteWorkspace : undefined}
         />
       )}
 

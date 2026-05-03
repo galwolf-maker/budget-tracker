@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Copy, Check, Users, Crown, User, Lock, Link } from 'lucide-react';
+import { X, Copy, Check, Users, Crown, User, Lock, Link, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import type { HouseholdMember, Workspace } from '../../types';
 
 interface WorkspaceModalProps {
@@ -10,6 +10,10 @@ interface WorkspaceModalProps {
   currentUserId: string;
   /** Pre-built join URL — null for personal workspaces */
   joinUrl: string | null;
+  /** Whether this workspace is currently active (blocks deletion) */
+  isActiveWorkspace: boolean;
+  /** Delete handler — only called for shared workspaces the user owns */
+  onDeleteWorkspace?: (workspaceId: string) => Promise<string | null>;
 }
 
 export function WorkspaceModal({
@@ -19,18 +23,38 @@ export function WorkspaceModal({
   members,
   currentUserId,
   joinUrl,
+  isActiveWorkspace,
+  onDeleteWorkspace,
 }: WorkspaceModalProps) {
   const [copied, setCopied] = useState(false);
+  const [deletePhase, setDeletePhase] = useState<'idle' | 'confirm' | 'deleting'>('idle');
+  const isDeleting = deletePhase === 'deleting';
 
   if (!isOpen) return null;
 
   const isPersonal = workspace.type === 'personal';
+  const currentMember = members.find((m) => m.userId === currentUserId);
+  const isOwner = currentMember?.role === 'owner';
+  const canDelete = !isPersonal && isOwner && !!onDeleteWorkspace;
 
   const handleCopy = async () => {
     if (!joinUrl) return;
     await navigator.clipboard.writeText(joinUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!onDeleteWorkspace) return;
+    setDeletePhase('deleting');
+    const err = await onDeleteWorkspace(workspace.id);
+    if (err) {
+      // Reset so the user sees the error via toast (App.tsx handles it)
+      setDeletePhase('idle');
+    } else {
+      setDeletePhase('idle');
+      onClose();
+    }
   };
 
   return (
@@ -144,6 +168,65 @@ export function WorkspaceModal({
                     {copied ? 'Copied!' : 'Copy link'}
                   </button>
                 </div>
+              </div>
+            </>
+          )}
+
+          {/* Delete section — shared workspaces, owners only */}
+          {canDelete && (
+            <>
+              <hr className="border-slate-100 dark:border-slate-700" />
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
+                  Danger zone
+                </p>
+
+                {/* Blocked when this is the active workspace */}
+                {isActiveWorkspace ? (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40">
+                    <AlertTriangle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Switch to a different workspace before deleting this one.
+                    </p>
+                  </div>
+                ) : deletePhase === 'confirm' ? (
+                  /* Two-step inline confirmation */
+                  <div className="rounded-xl border border-rose-200 dark:border-rose-700/50 bg-rose-50 dark:bg-rose-900/20 p-4 space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle size={15} className="text-rose-500 mt-0.5 shrink-0" />
+                      <p className="text-sm text-rose-700 dark:text-rose-300">
+                        Delete <strong>"{workspace.name}"</strong>? This will permanently remove all
+                        transactions, categories, and member data in this workspace.
+                        This action cannot be undone.
+                      </p>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setDeletePhase('idle')}
+                        disabled={isDeleting}
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleDeleteConfirm}
+                        disabled={isDeleting}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-rose-500 hover:bg-rose-600 transition-colors disabled:opacity-60"
+                      >
+                        {isDeleting && <Loader2 size={12} className="animate-spin" />}
+                        Yes, delete workspace
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setDeletePhase('confirm')}
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-700/50 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                    Delete workspace
+                  </button>
+                )}
               </div>
             </>
           )}
