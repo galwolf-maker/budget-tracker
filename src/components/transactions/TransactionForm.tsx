@@ -84,13 +84,21 @@ export function TransactionForm({
   const [monthsBack, setMonthsBack]             = useState(0);
   const [monthsForward, setMonthsForward]       = useState(0);
 
+  // ── DEBUG LOGGING ─────────────────────────────────────────────────────────
+  const isNew = !transaction;
+  console.log('[BT-DEBUG] Rendering TransactionForm modal');
+  console.log('[BT-DEBUG] isNew (no transaction prop):', isNew);
+  console.log('[BT-DEBUG] onSubmitRecurring provided:', !!onSubmitRecurring);
+  console.log('[BT-DEBUG] Recurring UI will render:', isNew && !!onSubmitRecurring);
+  console.log('[BT-DEBUG] recurringEnabled state:', recurringEnabled);
+
   // ── Confirmation phase state ──────────────────────────────────────────────
   const [phase, setPhase]               = useState<'edit' | 'confirm'>('edit');
   const [confirmedDates, setConfirmedDates] = useState<string[]>([]);
   const [duplicateDates, setDuplicateDates] = useState<Set<string>>(new Set());
   const [saving, setSaving]             = useState(false);
 
-  const isNew               = !transaction;
+  // isNew already declared above in the debug section
   const availableCategories = getCategoriesForType(type);
   const totalMonths         = monthsBack + 1 + monthsForward;
 
@@ -380,9 +388,15 @@ export function TransactionForm({
       </div>
 
       {/* ── Recurring section (new transactions only) ── */}
+      {/* DEBUG BANNER — remove after confirming deployment */}
+      <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 text-center">
+        RECURRING FEATURE ACTIVE · isNew={String(isNew)} · hasRecurringProp={String(!!onSubmitRecurring)}
+      </p>
+
       {isNew && onSubmitRecurring && (
         <div className="border-t border-slate-100 dark:border-slate-700 pt-4 space-y-3">
-          {/* Toggle row */}
+          {/* Toggle row — log that we got here */}
+          {console.log('[BT-DEBUG] Recurring UI rendered') as unknown as null}
           <label className="flex items-center justify-between cursor-pointer select-none">
             <div className="flex items-center gap-2.5">
               <RefreshCw
