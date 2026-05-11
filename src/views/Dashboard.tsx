@@ -29,6 +29,7 @@ interface DashboardProps {
   onAddTransaction: () => void;
   onReviewRecurring: () => void;
   onReviewDuplicates: () => void;
+  onMarkTransactionRecurring?: (id: string, isRecurring: boolean) => void;
 }
 
 export function Dashboard({
@@ -45,6 +46,7 @@ export function Dashboard({
   onAddTransaction,
   onReviewRecurring,
   onReviewDuplicates,
+  onMarkTransactionRecurring,
 }: DashboardProps) {
   const isEmpty = recentTransactions.length === 0;
 
@@ -59,7 +61,10 @@ export function Dashboard({
         onReviewDuplicates={onReviewDuplicates}
       />
 
-      <InsightsPanel transactions={allTransactions} />
+      <InsightsPanel
+        transactions={allTransactions}
+        onMarkTransactionRecurring={onMarkTransactionRecurring}
+      />
 
       <Charts expensesByCategory={expensesByCategory} monthlyData={monthlyData} />
 

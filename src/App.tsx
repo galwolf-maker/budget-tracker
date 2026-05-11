@@ -593,6 +593,7 @@ export default function App() {
               onAddTransaction={openAdd}
               onReviewRecurring={() => setIsRecurringReviewOpen(true)}
               onReviewDuplicates={() => setIsDuplicateReviewOpen(true)}
+              onMarkTransactionRecurring={user ? markRecurring : undefined}
             />
           )}
           {activeView === 'transactions' && (
