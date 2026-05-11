@@ -588,6 +588,8 @@ export default function App() {
               categories={categories}
               recurringCount={recurringCandidates.length}
               duplicateCount={duplicateGroups.length}
+              members={user ? members : []}
+              currentUserId={userId}
               onAddTransaction={openAdd}
               onReviewRecurring={() => setIsRecurringReviewOpen(true)}
               onReviewDuplicates={() => setIsDuplicateReviewOpen(true)}

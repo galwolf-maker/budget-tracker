@@ -5,12 +5,14 @@ import { InsightsPanel } from '../components/dashboard/InsightsPanel';
 import { CategoryTrendChart } from '../components/dashboard/CategoryTrendChart';
 import { SmartAlertsPanel } from '../components/smart/SmartAlertsPanel';
 import { TransactionItem } from '../components/transactions/TransactionItem';
+import { SharedInsights } from '../components/shared/SharedInsights';
 import type {
   SummaryData,
   Transaction,
   CategoryDataPoint,
   MonthlyDataPoint,
   Category,
+  HouseholdMember,
 } from '../types';
 
 interface DashboardProps {
@@ -22,6 +24,8 @@ interface DashboardProps {
   categories: Category[];
   recurringCount: number;
   duplicateCount: number;
+  members: HouseholdMember[];
+  currentUserId: string | null;
   onAddTransaction: () => void;
   onReviewRecurring: () => void;
   onReviewDuplicates: () => void;
@@ -36,6 +40,8 @@ export function Dashboard({
   categories,
   recurringCount,
   duplicateCount,
+  members,
+  currentUserId,
   onAddTransaction,
   onReviewRecurring,
   onReviewDuplicates,
@@ -58,6 +64,15 @@ export function Dashboard({
       <Charts expensesByCategory={expensesByCategory} monthlyData={monthlyData} />
 
       <CategoryTrendChart transactions={allTransactions} categories={categories} />
+
+      {members.length >= 2 && (
+        <SharedInsights
+          transactions={allTransactions}
+          members={members}
+          currentUserId={currentUserId}
+          categories={[...new Set(categories.map(c => c.name))]}
+        />
+      )}
 
       {/* Recent Transactions */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
