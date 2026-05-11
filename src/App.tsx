@@ -141,6 +141,7 @@ export default function App() {
     importTransactions,
     addRecurringTransactions,
     updateRecurringSeries,
+    updateFutureSeries,
     markRecurring,
     recurringAutoAdded,
     clearRecurringAutoAdded,
@@ -313,6 +314,20 @@ export default function App() {
       }
     },
     [deleteTransaction, addRecurringTransactions, toast, closeForm]
+  );
+
+  // Edit mode: update this transaction and all future ones in the series
+  const handleUpdateFutureSeries = useCallback(
+    async (groupId: string, fromDate: string, data: Omit<Transaction, 'id' | 'createdAt'>) => {
+      const error = await updateFutureSeries(groupId, fromDate, data);
+      if (error) {
+        toast('error', `Failed to update series: ${error}`);
+      } else {
+        closeForm();
+        toast('success', 'This and future recurring transactions updated.');
+      }
+    },
+    [updateFutureSeries, toast, closeForm]
   );
 
   // Edit mode: update every transaction in an existing recurring series
@@ -616,6 +631,7 @@ export default function App() {
           onSubmitRecurring={user ? handleFormSubmitRecurring : undefined}
           onConvertToRecurring={user ? handleConvertToRecurring : undefined}
           onUpdateSeries={user ? handleUpdateSeries : undefined}
+          onUpdateFutureSeries={user ? handleUpdateFutureSeries : undefined}
           onCancel={closeForm}
         />
       </Modal>

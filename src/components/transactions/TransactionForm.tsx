@@ -63,6 +63,12 @@ interface TransactionFormProps {
     groupId: string,
     data: Omit<Transaction, 'id' | 'createdAt'>
   ) => Promise<void>;
+  /** Edit transaction: update only future (≥ this transaction's date) entries in the series */
+  onUpdateFutureSeries?: (
+    groupId: string,
+    fromDate: string,
+    data: Omit<Transaction, 'id' | 'createdAt'>
+  ) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -84,6 +90,7 @@ export function TransactionForm({
   onSubmitRecurring,
   onConvertToRecurring,
   onUpdateSeries,
+  onUpdateFutureSeries,
   onCancel,
 }: TransactionFormProps) {
   const isNew = !transaction;
@@ -272,6 +279,35 @@ export function TransactionForm({
               Only this specific transaction will be changed.
             </p>
           </button>
+
+          {onUpdateFutureSeries && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                await onUpdateFutureSeries!(
+                  transaction!.recurringGroupId!,
+                  transaction!.date,
+                  pendingData
+                );
+                setSaving(false);
+              }}
+              className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group disabled:opacity-50"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100 group-hover:text-blue-700 dark:group-hover:text-blue-300">
+                    This and future occurrences
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Updates this transaction and all later ones in the series.
+                  </p>
+                </div>
+                {saving && <Loader2 size={14} className="animate-spin text-blue-500 shrink-0" />}
+              </div>
+            </button>
+          )}
 
           <button
             type="button"

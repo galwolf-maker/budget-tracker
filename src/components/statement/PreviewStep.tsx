@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import {
   CheckSquare, Square, AlertTriangle, Repeat, RefreshCw, ChevronDown,
   UtensilsCrossed, Home, Car, Tv, ShoppingBag, Heart,
-  Briefcase, Laptop, Gift, MoreHorizontal, Music, Pill,
+  Briefcase, Laptop, Gift, MoreHorizontal, Music, Pill, Sparkles,
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 import { useCurrencyContext } from '../../context/CurrencyContext';
@@ -21,6 +21,20 @@ export interface PreviewRow {
   type: TransactionType;
   isRecurring?: boolean;
   recurringFrequency?: 'monthly' | 'weekly';
+  recurringGroupId?: string;
+  /**
+   * Category from a high-confidence historical match — auto-applied.
+   * 'inherited-high'  : applied automatically (shown as badge)
+   * 'inherited-medium': suggested but not applied (shown as banner)
+   * 'keyword'         : from built-in keyword rules
+   * 'learned'         : from saved merchant rules
+   * 'default'         : fallback 'Other'
+   */
+  categorySource?: 'inherited-high' | 'inherited-medium' | 'keyword' | 'learned' | 'default';
+  /** For medium-confidence: the category being suggested (not yet applied). */
+  inheritedCategory?: string;
+  /** Human-readable description of the matched transaction. */
+  inheritedFrom?: string;
 }
 
 interface PreviewStepProps {
@@ -116,6 +130,7 @@ function TransactionRow({ row, categories, showRecurringSuggestion, onUpdate }: 
   const { currency } = useCurrencyContext();
   const [editField, setEditField] = useState<'amount' | 'date' | null>(null);
   const [showFreqPicker, setShowFreqPicker] = useState(false);
+  const [inheritanceDismissed, setInheritanceDismissed] = useState(false);
 
   const isExpense = row.type === 'expense';
   const color = catColor(row.category);
@@ -184,7 +199,7 @@ function TransactionRow({ row, categories, showRecurringSuggestion, onUpdate }: 
             <div className="relative">
               <select
                 value={row.category}
-                onChange={e => onUpdate(row.id, { category: e.target.value })}
+                onChange={e => onUpdate(row.id, { category: e.target.value, categorySource: undefined })}
                 className="text-[11px] font-medium appearance-none rounded-full pl-2 pr-5 py-0.5 border cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400 bg-transparent"
                 style={{
                   backgroundColor: hexToRgba(color, 0.1),
@@ -200,6 +215,17 @@ function TransactionRow({ row, categories, showRecurringSuggestion, onUpdate }: 
               </select>
               <ChevronDown size={9} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color }} />
             </div>
+
+            {/* Inherited-high badge */}
+            {row.categorySource === 'inherited-high' && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-700 rounded-full px-1.5 py-0.5"
+                title={`Category inherited from: ${row.inheritedFrom ?? 'previous transaction'}`}
+              >
+                <Sparkles size={8} />
+                from history
+              </span>
+            )}
 
             {/* Recurring badge */}
             {row.isRecurring && (
@@ -265,6 +291,32 @@ function TransactionRow({ row, categories, showRecurringSuggestion, onUpdate }: 
           </div>
         </div>
       </div>
+
+      {/* ── Medium-confidence category suggestion ── */}
+      {row.categorySource === 'inherited-medium' &&
+       row.inheritedCategory &&
+       !inheritanceDismissed && (
+        <div className="mx-4 mb-2 -mt-0.5 flex items-center gap-2 text-xs bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 rounded-lg px-3 py-1.5">
+          <Sparkles size={11} className="text-violet-500 shrink-0" />
+          <span className="text-violet-700 dark:text-violet-300 truncate flex-1">
+            Looks like <strong>{row.inheritedFrom ?? row.description}</strong>
+            {' '}— use <strong>{row.inheritedCategory}</strong>?
+          </span>
+          <button
+            onClick={() => onUpdate(row.id, { category: row.inheritedCategory!, categorySource: 'inherited-high' })}
+            className="shrink-0 text-[11px] font-semibold px-2 py-0.5 bg-violet-600 text-white rounded-full hover:bg-violet-700 transition-colors whitespace-nowrap"
+          >
+            Use it
+          </button>
+          <button
+            onClick={() => setInheritanceDismissed(true)}
+            className="shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
+            aria-label="Dismiss suggestion"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ── Recurring suggestion ── */}
       {showRecurringSuggestion && !row.isRecurring && (

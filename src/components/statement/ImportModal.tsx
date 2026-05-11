@@ -9,6 +9,7 @@ import { parseStatementText } from '../../utils/statementParser';
 import { parseXlsx } from '../../utils/xlsxParser';
 import { parseCSV } from '../../utils/csv';
 import { categorize, categorizeFromSector } from '../../utils/categorizer';
+import { findBestMatch } from '../../utils/transactionMatcher';
 import { ocrProvider } from '../../services/ocr';
 import type { OcrProgress } from '../../services/ocr/types';
 import type { Category, Transaction } from '../../types';
@@ -45,6 +46,72 @@ function confidenceUi(conf: number) {
   if (conf >= 0.75) return { label: 'High',   badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
   if (conf >= 0.45) return { label: 'Medium', badge: 'bg-amber-50  text-amber-700  border-amber-200'  };
   return               { label: 'Low',    badge: 'bg-rose-50   text-rose-700   border-rose-200'   };
+}
+
+// ── Metadata inheritance helper ───────────────────────────────────────────────
+
+type PartialRow = {
+  description: string;
+  amount: number;
+  type: 'income' | 'expense';
+  category: string;
+  isRecurring?: boolean;
+  recurringGroupId?: string;
+};
+
+function enrichRowWithHistory(
+  row: PartialRow,
+  existingTransactions: import('../../types').Transaction[],
+  autoAppliedCategory: string
+): Partial<import('./PreviewStep').PreviewRow> {
+  if (existingTransactions.length === 0) return {};
+
+  const match = findBestMatch(
+    { description: row.description, amount: row.amount, type: row.type },
+    existingTransactions
+  );
+
+  if (!match) return {};
+
+  const { category: matchedCat, confidence, matchedTransaction: mt, reason } = match;
+
+  // Never inherit "Other"
+  if (!matchedCat || matchedCat.toLowerCase() === 'other') return {};
+
+  // Determine if the current auto-categorised result is "Other" or a fallback
+  const currentIsOther = !autoAppliedCategory || autoAppliedCategory.toLowerCase() === 'other';
+
+  const inheritedFrom = mt.description;
+  const recurringGroupId = mt.recurringGroupId;
+  const isRecurring = mt.isRecurring || row.isRecurring;
+
+  if (confidence === 'high') {
+    console.log(`[BT-MATCH] Auto-applying category "${matchedCat}" to "${row.description}" (${reason})`);
+    return {
+      category: matchedCat,
+      categorySource: 'inherited-high' as const,
+      inheritedFrom,
+      ...(recurringGroupId ? { recurringGroupId, isRecurring: true } : {}),
+    };
+  }
+
+  if (confidence === 'medium') {
+    // Only surface as suggestion; don't auto-apply unless current is Other
+    if (currentIsOther) {
+      console.log(`[BT-MATCH] Medium confidence — showing suggestion "${matchedCat}" for "${row.description}" (${reason})`);
+      return {
+        // Keep existing category (might already be something reasonable)
+        categorySource: 'inherited-medium' as const,
+        inheritedCategory: matchedCat,
+        inheritedFrom,
+        ...(recurringGroupId ? { recurringGroupId, isRecurring: true } : {}),
+      };
+    }
+    return {};
+  }
+
+  // Low confidence — don't surface
+  return {};
 }
 
 export function ImportModal({ isOpen, onClose, categories, merchantRules, existingTransactions = [], onImport }: ImportModalProps) {
@@ -105,15 +172,19 @@ export function ImportModal({ isOpen, onClose, categories, merchantRules, existi
         setProgress(0.7); setStatus('Parsing rows…');
         const parsed = parseCSV(content, merchantRules);
         if (parsed.length === 0) throw new Error('No transactions found in this CSV file.');
-        const rows: PreviewRow[] = parsed.map((t, i) => ({
-          id: `csv-${Date.now()}-${i}`,
-          selected: true,
-          date: t.date,
-          description: t.description,
-          category: t.category,
-          amount: t.amount,
-          type: t.type,
-        }));
+        const rows: PreviewRow[] = parsed.map((t, i) => {
+          const base: PreviewRow = {
+            id: `csv-${Date.now()}-${i}`,
+            selected: true,
+            date: t.date,
+            description: t.description,
+            category: t.category,
+            amount: t.amount,
+            type: t.type,
+            categorySource: 'keyword',
+          };
+          return { ...base, ...enrichRowWithHistory(base, existingTransactions, t.category) };
+        });
         setPreviewRows(rows);
         setPreviewBack('choose');
         setStep('preview');
@@ -136,10 +207,14 @@ export function ImportModal({ isOpen, onClose, categories, merchantRules, existi
         const rows: PreviewRow[] = parsed.map(p => {
           const type = p.isCredit ? 'income' : 'expense';
           const avail = type === 'income' ? iCats : eCats;
-          let category = categorize(p.description, avail);
+          let category = categorize(p.description, avail, merchantRules);
           const fallback = avail.includes('Other') ? 'Other' : (avail[0] ?? 'Other');
-          if (category === fallback && p.sector) category = categorizeFromSector(p.sector, avail);
-          return { id: p.id, selected: true, date: p.date, description: p.description, category, amount: p.amount, type };
+          if (category === fallback && p.sector) category = categorizeFromSector(p.sector, avail, merchantRules);
+          const base: PreviewRow = {
+            id: p.id, selected: true, date: p.date, description: p.description,
+            category, amount: p.amount, type, categorySource: 'keyword',
+          };
+          return { ...base, ...enrichRowWithHistory(base, existingTransactions, category) };
         });
         setPreviewRows(rows);
         setPreviewBack('choose');
@@ -188,15 +263,12 @@ export function ImportModal({ isOpen, onClose, categories, merchantRules, existi
       const rows: PreviewRow[] = parsed.map(p => {
         const type = p.isCredit ? 'income' : 'expense';
         const avail = type === 'income' ? incCats : expCats;
-        return {
-          id: p.id,
-          selected: true,
-          date: p.date,
-          description: p.description,
-          category: categorize(p.description, avail),
-          amount: p.amount,
-          type,
+        const category = categorize(p.description, avail, merchantRules);
+        const base: PreviewRow = {
+          id: p.id, selected: true, date: p.date, description: p.description,
+          category, amount: p.amount, type, categorySource: 'keyword',
         };
+        return { ...base, ...enrichRowWithHistory(base, existingTransactions, category) };
       });
       setTextError('');
       setPreviewRows(rows);
@@ -216,6 +288,7 @@ export function ImportModal({ isOpen, onClose, categories, merchantRules, existi
       description: r.description,
       isRecurring: r.isRecurring ?? false,
       recurringFrequency: r.recurringFrequency,
+      recurringGroupId: r.recurringGroupId,
     }));
     onImport(transactions);
     setCount(transactions.length);

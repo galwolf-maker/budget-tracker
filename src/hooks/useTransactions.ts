@@ -443,6 +443,52 @@ export function useTransactions(userId: string | null, householdId: string | nul
     [userId, householdId, setTransactions]
   );
 
+  const updateFutureSeries = useCallback(
+    async (
+      groupId: string,
+      fromDate: string,
+      data: Omit<Transaction, 'id' | 'createdAt'>
+    ): Promise<string | null> => {
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.recurringGroupId === groupId && t.date >= fromDate
+            ? {
+                ...t,
+                type:        data.type,
+                amount:      data.amount,
+                category:    data.category,
+                description: data.description,
+                isRecurring: true,
+              }
+            : t
+        )
+      );
+
+      if (userId && supabase && householdId) {
+        const { error } = await supabase
+          .from('transactions')
+          .update({
+            type:         data.type,
+            amount:       data.amount,
+            category:     data.category,
+            description:  data.description,
+            is_recurring: true,
+          })
+          .eq('recurring_group_id', groupId)
+          .eq('household_id', householdId)
+          .gte('date', fromDate);
+
+        if (error) {
+          console.error('[BT] updateFutureSeries failed:', error);
+          return error.message;
+        }
+        console.log('[BT] Updated future series ✓', groupId, 'from', fromDate);
+      }
+      return null;
+    },
+    [userId, householdId, setTransactions]
+  );
+
   const markRecurring = useCallback(
     async (id: string, flag: boolean) => {
       setTransactions((prev) =>
@@ -604,6 +650,7 @@ export function useTransactions(userId: string | null, householdId: string | nul
     importTransactions,
     addRecurringTransactions,
     updateRecurringSeries,
+    updateFutureSeries,
     markRecurring,
     recurringAutoAdded,
     clearRecurringAutoAdded,
